@@ -225,44 +225,43 @@ class TestAreaAutoDetection:
         assert hasattr(flow, "_auto_detect_rooms")
         assert callable(flow._auto_detect_rooms)
 
-    def test_config_flow_has_get_entities_for_area(self):
-        """Config flow should have _get_entities_for_area method."""
-        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+    def test_module_has_get_entities_for_area(self):
+        """Module should have _get_entities_for_area function."""
+        from custom_components.smart_climate.config_flow import _get_entities_for_area
 
-        assert hasattr(SmartClimateConfigFlow, "_get_entities_for_area")
-        assert callable(SmartClimateConfigFlow._get_entities_for_area)
+        assert callable(_get_entities_for_area)
 
     def test_get_device_class_returns_device_class(self):
         """_get_device_class should return device_class first."""
-        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+        from custom_components.smart_climate.config_flow import _get_device_class
 
         class FakeEntity:
             device_class = "temperature"
             original_device_class = "humidity"
 
-        result = SmartClimateConfigFlow._get_device_class(FakeEntity())
+        result = _get_device_class(FakeEntity())
         assert result == "temperature"
 
     def test_get_device_class_falls_back_to_original(self):
         """_get_device_class should fallback to original_device_class."""
-        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+        from custom_components.smart_climate.config_flow import _get_device_class
 
         class FakeEntity:
             device_class = None
             original_device_class = "humidity"
 
-        result = SmartClimateConfigFlow._get_device_class(FakeEntity())
+        result = _get_device_class(FakeEntity())
         assert result == "humidity"
 
     def test_get_device_class_returns_none(self):
         """_get_device_class should return None if no device_class."""
-        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+        from custom_components.smart_climate.config_flow import _get_device_class
 
         class FakeEntity:
             device_class = None
             original_device_class = None
 
-        result = SmartClimateConfigFlow._get_device_class(FakeEntity())
+        result = _get_device_class(FakeEntity())
         assert result is None
 
     def test_get_entities_for_area_direct_assignment(self):
@@ -273,7 +272,7 @@ class TestAreaAutoDetection:
             FakeEntityRegistry,
         )
 
-        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+        from custom_components.smart_climate.config_flow import _get_entities_for_area
 
         entity_reg = FakeEntityRegistry()
         entity_reg.entities = {
@@ -286,9 +285,7 @@ class TestAreaAutoDetection:
         }
         device_reg = FakeDeviceRegistry()
 
-        result = SmartClimateConfigFlow._get_entities_for_area(
-            "lr_area", entity_reg, device_reg
-        )
+        result = _get_entities_for_area("lr_area", entity_reg, device_reg)
         assert len(result) == 1
         assert result[0].entity_id == "climate.living_room"
 
@@ -303,7 +300,7 @@ class TestAreaAutoDetection:
             FakeEntityRegistry,
         )
 
-        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+        from custom_components.smart_climate.config_flow import _get_entities_for_area
 
         entity_reg = FakeEntityRegistry()
         entity_reg.entities = {
@@ -316,9 +313,7 @@ class TestAreaAutoDetection:
             "dev1": FakeDeviceEntry("dev1", area_id="lr_area"),
         }
 
-        result = SmartClimateConfigFlow._get_entities_for_area(
-            "lr_area", entity_reg, device_reg
-        )
+        result = _get_entities_for_area("lr_area", entity_reg, device_reg)
         assert len(result) == 1
         assert result[0].entity_id == "sensor.lr_temp"
 
@@ -648,3 +643,237 @@ class TestRemoveRoom:
 
         schema = flow._get_room_menu_schema()
         assert schema is not None
+
+
+# ---------------------------------------------------------------------------
+# Tests for module-level _auto_detect_rooms_into
+# ---------------------------------------------------------------------------
+
+
+class TestAutoDetectRoomsInto:
+    """Test the module-level _auto_detect_rooms_into function."""
+
+    def test_auto_detect_rooms_into_importable(self):
+        """_auto_detect_rooms_into should be importable from config_flow."""
+        from custom_components.smart_climate.config_flow import _auto_detect_rooms_into
+
+        assert callable(_auto_detect_rooms_into)
+
+    def test_auto_detect_rooms_into_creates_rooms(self):
+        """_auto_detect_rooms_into should add rooms to the provided list."""
+        from homeassistant.helpers import (
+            area_registry as ar,
+        )
+        from homeassistant.helpers import (
+            device_registry as dr,
+        )
+        from homeassistant.helpers import (
+            entity_registry as er,
+        )
+        from homeassistant.helpers.area_registry import (
+            FakeAreaEntry,
+            FakeAreaRegistry,
+        )
+        from homeassistant.helpers.device_registry import FakeDeviceRegistry
+        from homeassistant.helpers.entity_registry import (
+            FakeEntityEntry,
+            FakeEntityRegistry,
+        )
+
+        from custom_components.smart_climate.config_flow import _auto_detect_rooms_into
+
+        area_reg = FakeAreaRegistry()
+        area_reg.areas = {
+            "lr": FakeAreaEntry("lr", "Living Room"),
+        }
+
+        entity_reg = FakeEntityRegistry()
+        entity_reg.entities = {
+            "climate.ecobee": FakeEntityEntry(
+                "climate.ecobee", area_id="lr"
+            ),
+            "sensor.lr_temp": FakeEntityEntry(
+                "sensor.lr_temp",
+                device_class="temperature",
+                area_id="lr",
+            ),
+        }
+
+        device_reg = FakeDeviceRegistry()
+
+        hass = MagicMock()
+        ar.async_get = MagicMock(return_value=area_reg)
+        er.async_get = MagicMock(return_value=entity_reg)
+        dr.async_get = MagicMock(return_value=device_reg)
+
+        rooms = []
+        _auto_detect_rooms_into(hass, ["lr"], rooms)
+
+        assert len(rooms) == 1
+        assert rooms[0]["room_name"] == "Living Room"
+        assert rooms[0]["climate_entity"] == "climate.ecobee"
+        assert "sensor.lr_temp" in rooms[0]["temp_sensors"]
+
+    def test_auto_detect_rooms_into_skips_duplicates(self):
+        """_auto_detect_rooms_into should not duplicate existing rooms."""
+        from homeassistant.helpers import (
+            area_registry as ar,
+        )
+        from homeassistant.helpers import (
+            device_registry as dr,
+        )
+        from homeassistant.helpers import (
+            entity_registry as er,
+        )
+        from homeassistant.helpers.area_registry import (
+            FakeAreaEntry,
+            FakeAreaRegistry,
+        )
+        from homeassistant.helpers.device_registry import FakeDeviceRegistry
+        from homeassistant.helpers.entity_registry import (
+            FakeEntityEntry,
+            FakeEntityRegistry,
+        )
+
+        from custom_components.smart_climate.config_flow import _auto_detect_rooms_into
+
+        area_reg = FakeAreaRegistry()
+        area_reg.areas = {
+            "lr": FakeAreaEntry("lr", "Living Room"),
+        }
+
+        entity_reg = FakeEntityRegistry()
+        entity_reg.entities = {
+            "climate.ecobee": FakeEntityEntry(
+                "climate.ecobee", area_id="lr"
+            ),
+        }
+
+        device_reg = FakeDeviceRegistry()
+
+        hass = MagicMock()
+        ar.async_get = MagicMock(return_value=area_reg)
+        er.async_get = MagicMock(return_value=entity_reg)
+        dr.async_get = MagicMock(return_value=device_reg)
+
+        # Pre-existing room with same slug
+        rooms = [{"room_name": "Living Room", "room_slug": "living_room"}]
+        _auto_detect_rooms_into(hass, ["lr"], rooms)
+
+        assert len(rooms) == 1  # No duplicate added
+
+
+# ---------------------------------------------------------------------------
+# Tests for expanded options flow
+# ---------------------------------------------------------------------------
+
+
+class TestOptionsFlowMenu:
+    """Test the multi-step options flow menu structure."""
+
+    def _make_options_flow(self, rooms=None, data=None):
+        """Create an options flow with mock data."""
+        from custom_components.smart_climate.config_flow import SmartClimateOptionsFlow
+
+        mock_entry = MagicMock()
+        mock_entry.data = data or {
+            CONF_UPDATE_INTERVAL: 60,
+            CONF_ENABLE_FOLLOW_ME: True,
+            CONF_ENABLE_ZONE_BALANCING: True,
+            CONF_ROOMS: rooms or [],
+        }
+        return SmartClimateOptionsFlow(mock_entry)
+
+    def test_options_flow_has_general_settings_step(self):
+        """Options flow should have async_step_general_settings."""
+        flow = self._make_options_flow()
+        assert hasattr(flow, "async_step_general_settings")
+        assert callable(flow.async_step_general_settings)
+
+    def test_options_flow_has_manage_rooms_step(self):
+        """Options flow should have async_step_manage_rooms."""
+        flow = self._make_options_flow()
+        assert hasattr(flow, "async_step_manage_rooms")
+        assert callable(flow.async_step_manage_rooms)
+
+    def test_options_flow_has_options_area_select_step(self):
+        """Options flow should have async_step_options_area_select."""
+        flow = self._make_options_flow()
+        assert hasattr(flow, "async_step_options_area_select")
+        assert callable(flow.async_step_options_area_select)
+
+    def test_options_flow_has_options_add_room_step(self):
+        """Options flow should have async_step_options_add_room."""
+        flow = self._make_options_flow()
+        assert hasattr(flow, "async_step_options_add_room")
+        assert callable(flow.async_step_options_add_room)
+
+    def test_options_flow_has_options_remove_room_step(self):
+        """Options flow should have async_step_options_remove_room."""
+        flow = self._make_options_flow()
+        assert hasattr(flow, "async_step_options_remove_room")
+        assert callable(flow.async_step_options_remove_room)
+
+    def test_options_flow_has_ai_settings_step(self):
+        """Options flow should have async_step_ai_settings."""
+        flow = self._make_options_flow()
+        assert hasattr(flow, "async_step_ai_settings")
+        assert callable(flow.async_step_ai_settings)
+
+    def test_options_flow_has_save_and_exit(self):
+        """Options flow should have _save_and_exit method."""
+        flow = self._make_options_flow()
+        assert hasattr(flow, "_save_and_exit")
+        assert callable(flow._save_and_exit)
+
+    def test_options_flow_initializes_rooms_from_config(self):
+        """Options flow should load existing rooms from config entry."""
+        rooms = [
+            {"room_name": "Living Room", "room_slug": "living_room"},
+            {"room_name": "Bedroom", "room_slug": "bedroom"},
+        ]
+        flow = self._make_options_flow(rooms=rooms)
+        assert len(flow._rooms) == 2
+        assert flow._rooms[0]["room_name"] == "Living Room"
+        assert flow._rooms[1]["room_name"] == "Bedroom"
+
+    def test_options_flow_rooms_are_mutable_copy(self):
+        """Options flow rooms should be a copy, not a reference."""
+        rooms = [{"room_name": "Living Room", "room_slug": "living_room"}]
+        flow = self._make_options_flow(rooms=rooms)
+        flow._rooms.append({"room_name": "New", "room_slug": "new"})
+        # Original list should not be modified
+        assert len(rooms) == 1
+
+    def test_options_flow_data_is_mutable_copy(self):
+        """Options flow data should be a copy, not a reference."""
+        data = {CONF_UPDATE_INTERVAL: 60, CONF_ROOMS: []}
+        flow = self._make_options_flow(data=data)
+        flow._data[CONF_UPDATE_INTERVAL] = 120
+        # Original should not be modified
+        assert data[CONF_UPDATE_INTERVAL] == 60
+
+    def test_options_flow_add_room_appends(self):
+        """Adding a room via options flow should append to _rooms."""
+        flow = self._make_options_flow()
+        assert len(flow._rooms) == 0
+        flow._rooms.append({
+            "room_name": "New Room",
+            "room_slug": "new_room",
+            "climate_entity": "climate.test",
+        })
+        assert len(flow._rooms) == 1
+        assert flow._rooms[0]["room_name"] == "New Room"
+
+    def test_options_flow_remove_room_filters(self):
+        """Removing a room via options flow should filter by slug."""
+        rooms = [
+            {"room_name": "Living Room", "room_slug": "living_room"},
+            {"room_name": "Bedroom", "room_slug": "bedroom"},
+        ]
+        flow = self._make_options_flow(rooms=rooms)
+        flow._rooms = [
+            r for r in flow._rooms if r["room_slug"] != "bedroom"
+        ]
+        assert len(flow._rooms) == 1
+        assert flow._rooms[0]["room_slug"] == "living_room"

@@ -105,11 +105,62 @@
     "step": {
       "init": {
         "title": "Smart Climate Options",
+        "description": "Choose a section to configure.",
+        "data": {
+          "action": "Action"
+        }
+      },
+      "general_settings": {
+        "title": "General Settings",
+        "description": "Update general integration settings.",
         "data": {
           "update_interval": "Update Interval (seconds)",
           "enable_follow_me": "Enable Follow-Me Mode",
           "enable_zone_balancing": "Enable Zone Balancing",
-          "operation_mode": "Operation Mode",
+          "operation_mode": "Operation Mode"
+        }
+      },
+      "manage_rooms": {
+        "title": "Manage Rooms",
+        "description": "Configured rooms ({room_count}): {room_names}",
+        "data": {
+          "action": "Action"
+        }
+      },
+      "options_area_select": {
+        "title": "Auto-Detect Rooms from Areas",
+        "description": "Select Home Assistant areas to auto-detect rooms and their entities. Existing rooms will not be duplicated.",
+        "data": {
+          "areas": "Areas"
+        }
+      },
+      "options_add_room": {
+        "title": "Add a Room",
+        "description": "Configure sensors and devices for this room.",
+        "data": {
+          "room_name": "Room Name",
+          "climate_entity": "Climate Entity (thermostat/zone)",
+          "temp_sensors": "Temperature Sensors",
+          "humidity_sensors": "Humidity Sensors",
+          "presence_sensors": "Presence/Motion Sensors",
+          "door_window_sensors": "Door/Window Contact Sensors",
+          "vent_entities": "Smart Vent Entities",
+          "auxiliary_entities": "Auxiliary Devices (heaters, fans, portable ACs)",
+          "room_priority": "Room Priority (1-10)",
+          "target_temp_offset": "Target Temperature Offset"
+        }
+      },
+      "options_remove_room": {
+        "title": "Remove a Room",
+        "description": "Select a room to remove from the configuration.",
+        "data": {
+          "room_to_remove": "Room to Remove"
+        }
+      },
+      "ai_settings": {
+        "title": "AI Settings",
+        "description": "Configure AI provider for daily analysis and suggestions.",
+        "data": {
           "ai_provider": "AI Provider",
           "ai_api_key": "API Key",
           "ai_model": "Model Name",
