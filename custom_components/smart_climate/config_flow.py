@@ -1228,7 +1228,6 @@ class SmartClimateOptionsFlow(OptionsFlow):
                     ): selector.EntitySelector(
                         selector.EntitySelectorConfig(
                             domain="binary_sensor",
-                            device_class="motion",
                             multiple=True,
                         )
                     ),
