@@ -1,0 +1,6 @@
+{
+  "name": "Smart Climate",
+  "render_readme": true,
+  "domains": ["climate", "sensor", "binary_sensor"],
+  "homeassistant": "2026.2.0"
+}

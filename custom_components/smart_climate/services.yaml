@@ -1,0 +1,194 @@
+trigger_analysis:
+  name: Trigger AI Analysis
+  description: Run AI analysis now
+  fields:
+    scope:
+      name: Scope
+      description: Analysis scope
+      required: false
+      default: "all"
+      selector:
+        select:
+          options: ["all", "room"]
+    room:
+      name: Room
+      description: Room slug (when scope is room)
+      required: false
+      selector:
+        text:
+
+approve_suggestion:
+  name: Approve Suggestion
+  description: Approve a suggestion by ID
+  fields:
+    suggestion_id:
+      name: Suggestion ID
+      description: The UUID of the suggestion
+      required: true
+      selector:
+        text:
+
+reject_suggestion:
+  name: Reject Suggestion
+  description: Reject a suggestion by ID
+  fields:
+    suggestion_id:
+      name: Suggestion ID
+      required: true
+      selector:
+        text:
+    reason:
+      name: Reason
+      description: Optional rejection reason
+      required: false
+      selector:
+        text:
+
+approve_all_suggestions:
+  name: Approve All Suggestions
+  description: Approve all pending suggestions
+
+reject_all_suggestions:
+  name: Reject All Suggestions
+  description: Reject all pending suggestions
+
+set_room_priority:
+  name: Set Room Priority
+  description: Change room priority
+  fields:
+    room:
+      name: Room
+      description: Room slug
+      required: true
+      selector:
+        text:
+    priority:
+      name: Priority
+      description: Priority 1-10
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 10
+
+force_follow_me:
+  name: Force Follow-Me
+  description: Override follow-me to a specific room
+  fields:
+    room:
+      name: Room
+      description: Room slug
+      required: true
+      selector:
+        text:
+
+reset_statistics:
+  name: Reset Statistics
+  description: Reset HVAC runtime and cycle counters
+
+add_schedule:
+  name: Add Schedule
+  description: Add a named temperature schedule
+  fields:
+    name:
+      name: Schedule Name
+      required: true
+      selector:
+        text:
+    rooms:
+      name: Rooms
+      description: Room slugs (comma-separated) or "__all__"
+      required: true
+      selector:
+        text:
+    days:
+      name: Days
+      description: Days of week (0=Mon through 6=Sun, comma-separated)
+      required: true
+      selector:
+        text:
+    start_time:
+      name: Start Time
+      description: "HH:MM format"
+      required: true
+      selector:
+        time:
+    end_time:
+      name: End Time
+      required: true
+      selector:
+        time:
+    target_temp:
+      name: Target Temperature
+      required: true
+      selector:
+        number:
+          min: 50
+          max: 90
+          step: 0.5
+    hvac_mode:
+      name: HVAC Mode
+      required: false
+      selector:
+        select:
+          options: ["heat", "cool", "auto", "off"]
+    use_auxiliary:
+      name: Use Auxiliary
+      required: false
+      default: false
+      selector:
+        boolean:
+    priority:
+      name: Priority
+      required: false
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 10
+
+remove_schedule:
+  name: Remove Schedule
+  description: Remove a schedule by name
+  fields:
+    name:
+      name: Schedule Name
+      required: true
+      selector:
+        text:
+
+activate_schedule:
+  name: Activate Schedule
+  description: Manually activate a schedule now
+  fields:
+    name:
+      name: Schedule Name
+      required: true
+      selector:
+        text:
+
+deactivate_schedule:
+  name: Deactivate Schedule
+  description: Deactivate a manual schedule override
+  fields:
+    name:
+      name: Schedule Name
+      required: true
+      selector:
+        text:
+
+set_auxiliary_mode:
+  name: Set Auxiliary Mode
+  description: Enable or disable auxiliary devices for a room
+  fields:
+    room:
+      name: Room
+      description: Room slug
+      required: true
+      selector:
+        text:
+    enabled:
+      name: Enabled
+      required: true
+      selector:
+        boolean:

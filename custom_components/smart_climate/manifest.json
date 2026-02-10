@@ -1,0 +1,13 @@
+{
+  "domain": "smart_climate",
+  "name": "Smart Climate",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/your-repo/hass-smart-climate",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/your-repo/hass-smart-climate/issues",
+  "requirements": [],
+  "version": "0.1.0",
+  "homeassistant": "2026.2.0"
+}

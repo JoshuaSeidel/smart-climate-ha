@@ -1,0 +1,106 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Smart Climate Setup",
+        "description": "Configure your Smart Climate integration.",
+        "data": {
+          "integration_name": "Integration Name",
+          "temp_unit": "Temperature Unit",
+          "update_interval": "Update Interval (seconds)",
+          "enable_follow_me": "Enable Follow-Me Mode",
+          "enable_zone_balancing": "Enable Zone Balancing"
+        }
+      },
+      "weather": {
+        "title": "Outdoor Weather",
+        "description": "Select a weather entity or outdoor temperature sensor for efficiency calculations.",
+        "data": {
+          "weather_entity": "Weather Entity",
+          "outdoor_temp_sensor": "Outdoor Temperature Sensor"
+        }
+      },
+      "room_menu": {
+        "title": "Room Setup",
+        "description": "You have configured {room_count} room(s). Add more rooms or finish.",
+        "data": {
+          "action": "Action"
+        }
+      },
+      "add_room": {
+        "title": "Add a Room",
+        "description": "Configure sensors and devices for this room.",
+        "data": {
+          "room_name": "Room Name",
+          "climate_entity": "Climate Entity (thermostat/zone)",
+          "temp_sensors": "Temperature Sensors",
+          "humidity_sensors": "Humidity Sensors",
+          "presence_sensors": "Presence/Motion Sensors",
+          "door_window_sensors": "Door/Window Contact Sensors",
+          "vent_entities": "Smart Vent Entities",
+          "auxiliary_entities": "Auxiliary Devices (heaters, fans, portable ACs)",
+          "room_priority": "Room Priority (1-10)",
+          "target_temp_offset": "Target Temperature Offset"
+        }
+      },
+      "schedule_menu": {
+        "title": "Schedule Setup",
+        "description": "You have configured {schedule_count} schedule(s). Add more or finish.",
+        "data": {
+          "action": "Action"
+        }
+      },
+      "add_schedule": {
+        "title": "Add a Schedule",
+        "description": "Create a named temperature schedule for specific rooms and times.",
+        "data": {
+          "schedule_name": "Schedule Name",
+          "schedule_rooms": "Rooms",
+          "schedule_days": "Days of Week",
+          "schedule_start_time": "Start Time",
+          "schedule_end_time": "End Time",
+          "schedule_target_temp": "Target Temperature",
+          "schedule_hvac_mode": "HVAC Mode Override",
+          "schedule_use_auxiliary": "Use Auxiliary Devices",
+          "schedule_priority": "Priority (1-10)"
+        }
+      },
+      "ai_provider": {
+        "title": "AI Provider",
+        "description": "Configure an AI provider for daily analysis and suggestions. Select 'None' to disable AI features.",
+        "data": {
+          "ai_provider": "AI Provider",
+          "ai_api_key": "API Key",
+          "ai_model": "Model Name",
+          "ai_base_url": "Base URL (for Ollama/custom)",
+          "ai_analysis_time": "Daily Analysis Time",
+          "ai_auto_apply": "Auto-apply High-Confidence Suggestions"
+        }
+      }
+    },
+    "error": {
+      "min_one_room": "At least one room is required.",
+      "ai_connection_failed": "Could not connect to the AI provider. Check your settings."
+    },
+    "abort": {
+      "already_configured": "Smart Climate is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Smart Climate Options",
+        "data": {
+          "update_interval": "Update Interval (seconds)",
+          "enable_follow_me": "Enable Follow-Me Mode",
+          "enable_zone_balancing": "Enable Zone Balancing",
+          "ai_provider": "AI Provider",
+          "ai_api_key": "API Key",
+          "ai_model": "Model Name",
+          "ai_base_url": "Base URL",
+          "ai_auto_apply": "Auto-apply High-Confidence Suggestions"
+        }
+      }
+    }
+  }
+}
