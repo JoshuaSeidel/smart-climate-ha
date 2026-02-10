@@ -26,10 +26,27 @@ climate system. Your job is to analyze the current state of the home's HVAC \
 system, room conditions, schedules, and weather, then provide actionable \
 suggestions to improve comfort and energy efficiency.
 
+## Important: HVAC Architecture
+
+- Rooms are monitoring zones with their own temperature/humidity sensors.
+- Multiple rooms often share the SAME climate entity (one HVAC system).
+- The "HVAC target" shown per room comes from the shared climate entity — \
+it is NOT a per-room thermostat. All rooms sharing a climate entity have the \
+same target.
+- The "Room sensor temperature" is the actual reading from that room's \
+dedicated sensor (e.g. a remote sensor or thermostat used as a sensor).
+- When you suggest `set_temperature`, it changes the climate entity's \
+setpoint, which affects ALL rooms on that HVAC system.
+- The "HVAC Systems" section shows which rooms share a climate entity. \
+Do NOT suggest conflicting temperatures for rooms on the same HVAC system.
+- Use `null` for the room field when a suggestion applies to the whole \
+HVAC system rather than a specific zone.
+
 ## Constraints
 
 - You may ONLY suggest the following safe action types:
-  - **set_temperature**: Adjust a thermostat's target temperature.
+  - **set_temperature**: Adjust an HVAC system's target temperature. This \
+changes the climate entity setpoint for all rooms on that system.
   - **set_mode**: Change the HVAC mode (heat, cool, auto, off, fan_only).
   - **vent_adjustment**: Recommend opening or closing vents in specific rooms.
   - **schedule_change**: Suggest modifications to existing schedules.
@@ -41,6 +58,8 @@ suggestions to improve comfort and energy efficiency.
 - Factor in outdoor weather conditions and trends.
 - Account for occupancy patterns when making suggestions.
 - Prioritize rooms that are occupied or will be occupied soon.
+- When rooms share an HVAC, suggest ONE temperature that best serves all \
+zones — do not emit separate set_temperature suggestions per room.
 
 ## Output Format
 
@@ -53,7 +72,7 @@ You MUST respond with valid JSON matching this exact schema:
             "title": "Short actionable title",
             "description": "Detailed description of what to do and why",
             "reasoning": "Explanation of the data-driven reasoning behind this suggestion",
-            "room": "room_slug or null for house-wide suggestions",
+            "room": "room_slug or null for house-wide / shared HVAC suggestions",
             "action_type": "set_temperature|set_mode|vent_adjustment|schedule_change|general",
             "action_data": {
                 "temperature": 72,
@@ -113,6 +132,11 @@ def build_user_prompt(coordinator_data: dict[str, Any]) -> str:
     # -- House-level overview
     if house_state is not None:
         sections.append(_build_house_section(house_state))
+
+    # -- HVAC systems (group rooms by shared climate entity)
+    hvac_section = _build_hvac_systems_section(rooms_data)
+    if hvac_section:
+        sections.append(hvac_section)
 
     # -- Room details
     room_section = _build_rooms_section(rooms_data)
@@ -222,11 +246,17 @@ def _build_rooms_section(
 
 def _detail_room(slug: str, name: str, room: Any) -> str:
     """Build a detailed block for a single room."""
+    config = getattr(room, "config", None)
+    climate_entity = getattr(config, "climate_entity", None) if config else None
+
     parts = [f"\n### {name} ({slug})"]
+
+    if climate_entity:
+        parts.append(f"  - Climate entity: {climate_entity}")
 
     temp = getattr(room, "temperature", None)
     if temp is not None:
-        parts.append(f"  - Current temperature: {temp}")
+        parts.append(f"  - Room sensor temperature: {temp}")
 
     humidity = getattr(room, "humidity", None)
     if humidity is not None:
@@ -234,7 +264,7 @@ def _detail_room(slug: str, name: str, room: Any) -> str:
 
     target = getattr(room, "current_target", None)
     if target is not None:
-        parts.append(f"  - Thermostat target: {target}")
+        parts.append(f"  - HVAC target (from {climate_entity or 'climate entity'}): {target}")
 
     smart_target = getattr(room, "smart_target", None)
     if smart_target is not None:
@@ -306,6 +336,33 @@ def _summarize_room(slug: str, name: str, room: Any) -> str:
     action = getattr(room, "hvac_action", "?")
 
     return (
-        f"  - {name} ({slug}): temp={temp}, target={target}, "
+        f"  - {name} ({slug}): sensor_temp={temp}, hvac_target={target}, "
         f"comfort={comfort}, occupied={occupied}, hvac={action}"
     )
+
+
+def _build_hvac_systems_section(rooms_data: dict[str, Any]) -> str:
+    """Build an HVAC systems section grouping rooms by shared climate entity."""
+    # Map climate_entity -> list of room names
+    hvac_groups: dict[str, list[str]] = {}
+    for slug, room in rooms_data.items():
+        config = getattr(room, "config", None)
+        entity = getattr(config, "climate_entity", None) if config else None
+        if entity:
+            hvac_groups.setdefault(entity, []).append(slug)
+
+    if not hvac_groups:
+        return ""
+
+    lines = ["## HVAC Systems"]
+    for entity, room_slugs in hvac_groups.items():
+        if len(room_slugs) > 1:
+            lines.append(
+                f"- **{entity}** controls {len(room_slugs)} rooms: "
+                f"{', '.join(room_slugs)} "
+                f"(shared — one set_temperature affects all)"
+            )
+        else:
+            lines.append(f"- **{entity}** controls: {room_slugs[0]}")
+
+    return "\n".join(lines)
