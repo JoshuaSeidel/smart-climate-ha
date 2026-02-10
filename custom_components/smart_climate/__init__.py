@@ -19,6 +19,7 @@ CARD_URL = f"/{DOMAIN}/smart-climate-card.js"
 CARD_DIR = Path(__file__).parent / "www"
 
 PLATFORMS_LIST: list[Platform] = [
+    Platform.BUTTON,
     Platform.CLIMATE,
     Platform.SENSOR,
     Platform.BINARY_SENSOR,

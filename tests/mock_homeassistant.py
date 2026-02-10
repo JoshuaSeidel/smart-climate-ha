@@ -31,6 +31,7 @@ def setup_mock_homeassistant():
     # homeassistant.const
     ha_const = _create_module("homeassistant.const")
     ha_const.Platform = type("Platform", (), {
+        "BUTTON": "button",
         "CLIMATE": "climate",
         "SENSOR": "sensor",
         "BINARY_SENSOR": "binary_sensor",
@@ -40,6 +41,13 @@ def setup_mock_homeassistant():
         "FAHRENHEIT": "°F",
         "CELSIUS": "°C",
     })()
+    ha_const.UnitOfTime = type("UnitOfTime", (), {
+        "MINUTES": "min",
+        "SECONDS": "s",
+        "HOURS": "h",
+    })()
+    ha_const.PERCENTAGE = "%"
+    ha_const.ATTR_TEMPERATURE = "temperature"
 
     # homeassistant.core
     ha_core = _create_module("homeassistant.core")
@@ -130,9 +138,16 @@ def setup_mock_homeassistant():
             self.data = data
 
     ha_coordinator.DataUpdateCoordinator = FakeCoordinator
-    ha_coordinator.CoordinatorEntity = type("CoordinatorEntity", (), {
-        "__init__": lambda self, coordinator: setattr(self, "coordinator", coordinator),
-    })
+    class FakeCoordinatorEntityMeta(type):
+        """Allow CoordinatorEntity[X] subscription on Python 3.9."""
+        def __getitem__(cls, item):
+            return cls
+
+    class FakeCoordinatorEntity(metaclass=FakeCoordinatorEntityMeta):
+        def __init__(self, coordinator):
+            self.coordinator = coordinator
+
+    ha_coordinator.CoordinatorEntity = FakeCoordinatorEntity
 
     # homeassistant.helpers.event
     ha_event = _create_module("homeassistant.helpers.event")
@@ -279,6 +294,16 @@ def setup_mock_homeassistant():
     # homeassistant.components.select
     ha_select = _create_module("homeassistant.components.select")
     ha_select.SelectEntity = type("SelectEntity", (), {})
+
+    # homeassistant.components.button
+    ha_button = _create_module("homeassistant.components.button")
+    ha_button.ButtonEntity = type("ButtonEntity", (), {
+        "async_press": lambda self: None,
+    })
+
+    # homeassistant.components.persistent_notification
+    ha_pn = _create_module("homeassistant.components.persistent_notification")
+    ha_pn.async_create = MagicMock()
 
     # homeassistant.helpers.entity_platform
     ha_entity_platform = _create_module("homeassistant.helpers.entity_platform")

@@ -54,6 +54,7 @@ from .const import (
     EVENT_WINDOW_OPEN_ADJUSTED,
     OPERATION_MODE_ACTIVE,
     OPERATION_MODE_DISABLED,
+    SUGGESTION_PENDING,
 )
 from .helpers.auxiliary import (
     async_disengage_auxiliary,
@@ -770,9 +771,53 @@ class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         ),
                     },
                 )
+
+                # Create persistent notification with full analysis details
+                self._create_analysis_notification(provider)
         except ImportError:
             _LOGGER.warning(
                 "AI helper module not available; skipping analysis"
             )
         except Exception:
             _LOGGER.exception("AI analysis failed")
+
+    def _create_analysis_notification(self, provider: str) -> None:
+        """Create a persistent notification with the full AI analysis results."""
+        house = self._house_state
+        lines: list[str] = []
+
+        # Summary section
+        if house.ai_daily_summary:
+            lines.append("## Summary")
+            lines.append(house.ai_daily_summary)
+            lines.append("")
+
+        # Suggestions section
+        pending = [s for s in house.suggestions if s.status == SUGGESTION_PENDING]
+        if pending:
+            lines.append(f"## Suggestions ({len(pending)} pending)")
+            for s in pending:
+                lines.append(f"### {s.title}")
+                lines.append(f"**Priority:** {s.priority} | **Confidence:** {s.confidence:.0%}")
+                if s.room:
+                    lines.append(f"**Room:** {s.room}")
+                if s.description:
+                    lines.append(s.description)
+                if s.reasoning:
+                    lines.append(f"*Reasoning: {s.reasoning}*")
+                lines.append("")
+
+        # Metadata
+        lines.append("---")
+        lines.append(
+            f"*Provider: {provider} | "
+            f"Analyzed: {house.last_analysis_time.strftime('%Y-%m-%d %H:%M') if house.last_analysis_time else 'N/A'}*"
+        )
+
+        message = "\n".join(lines)
+
+        self.hass.components.persistent_notification.async_create(
+            message=message,
+            title="Smart Climate AI Analysis",
+            notification_id="smart_climate_analysis",
+        )

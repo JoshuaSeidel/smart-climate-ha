@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 DOMAIN = "smart_climate"
-PLATFORMS = ["climate", "sensor", "binary_sensor", "select"]
+PLATFORMS = ["button", "climate", "sensor", "binary_sensor", "select"]
 
 # Config keys - General
 CONF_INTEGRATION_NAME = "integration_name"

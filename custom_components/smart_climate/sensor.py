@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
+    CONF_AI_PROVIDER,
     CONF_TEMP_UNIT,
     DOMAIN,
     ENTITY_PREFIX,
@@ -649,6 +650,20 @@ class SmartClimateSuggestionCountSensor(SmartClimateEntity, SensorEntity):
         return {
             "total_suggestions": len(house_state.suggestions),
             "pending_titles": [s.title for s in pending],
+            "suggestions": [
+                {
+                    "id": s.id,
+                    "title": s.title,
+                    "description": s.description,
+                    "reasoning": s.reasoning,
+                    "confidence": s.confidence,
+                    "priority": s.priority,
+                    "status": s.status,
+                    "room": s.room,
+                    "action_type": s.action_type,
+                }
+                for s in house_state.suggestions
+            ],
         }
 
 
@@ -682,6 +697,22 @@ class SmartClimateDailySummarySensor(SmartClimateEntity, SensorEntity):
         if house_state is None:
             return None
         return house_state.ai_daily_summary or None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional attributes including full summary text."""
+        house_state = self.coordinator.data.get("house")
+        if house_state is None:
+            return {}
+        return {
+            "full_summary": house_state.ai_daily_summary or "",
+            "provider": self.coordinator.entry.data.get(CONF_AI_PROVIDER, "none"),
+            "analysis_time": (
+                house_state.last_analysis_time.isoformat()
+                if house_state.last_analysis_time
+                else None
+            ),
+        }
 
 
 class SmartClimateActiveHouseScheduleSensor(SmartClimateEntity, SensorEntity):
