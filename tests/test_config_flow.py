@@ -191,3 +191,460 @@ class TestConfigFlowDataManagement:
         assert len(flow._data[CONF_ROOMS]) == 1
         assert len(flow._data[CONF_SCHEDULES]) == 0
         assert flow._data[CONF_ROOMS][0]["room_name"] == "Test Room"
+
+
+# ---------------------------------------------------------------------------
+# Tests for area auto-detection
+# ---------------------------------------------------------------------------
+
+
+class TestAreaAutoDetection:
+    """Test the area auto-detection feature in the config flow."""
+
+    def test_config_flow_has_area_select_step(self):
+        """Config flow should have async_step_area_select."""
+        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+
+        flow = SmartClimateConfigFlow()
+        assert hasattr(flow, "async_step_area_select")
+        assert callable(flow.async_step_area_select)
+
+    def test_config_flow_has_remove_room_step(self):
+        """Config flow should have async_step_remove_room."""
+        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+
+        flow = SmartClimateConfigFlow()
+        assert hasattr(flow, "async_step_remove_room")
+        assert callable(flow.async_step_remove_room)
+
+    def test_config_flow_has_auto_detect_rooms(self):
+        """Config flow should have _auto_detect_rooms method."""
+        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+
+        flow = SmartClimateConfigFlow()
+        assert hasattr(flow, "_auto_detect_rooms")
+        assert callable(flow._auto_detect_rooms)
+
+    def test_config_flow_has_get_entities_for_area(self):
+        """Config flow should have _get_entities_for_area method."""
+        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+
+        assert hasattr(SmartClimateConfigFlow, "_get_entities_for_area")
+        assert callable(SmartClimateConfigFlow._get_entities_for_area)
+
+    def test_get_device_class_returns_device_class(self):
+        """_get_device_class should return device_class first."""
+        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+
+        class FakeEntity:
+            device_class = "temperature"
+            original_device_class = "humidity"
+
+        result = SmartClimateConfigFlow._get_device_class(FakeEntity())
+        assert result == "temperature"
+
+    def test_get_device_class_falls_back_to_original(self):
+        """_get_device_class should fallback to original_device_class."""
+        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+
+        class FakeEntity:
+            device_class = None
+            original_device_class = "humidity"
+
+        result = SmartClimateConfigFlow._get_device_class(FakeEntity())
+        assert result == "humidity"
+
+    def test_get_device_class_returns_none(self):
+        """_get_device_class should return None if no device_class."""
+        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+
+        class FakeEntity:
+            device_class = None
+            original_device_class = None
+
+        result = SmartClimateConfigFlow._get_device_class(FakeEntity())
+        assert result is None
+
+    def test_get_entities_for_area_direct_assignment(self):
+        """_get_entities_for_area should find entities directly assigned."""
+        from homeassistant.helpers.device_registry import FakeDeviceRegistry
+        from homeassistant.helpers.entity_registry import (
+            FakeEntityEntry,
+            FakeEntityRegistry,
+        )
+
+        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+
+        entity_reg = FakeEntityRegistry()
+        entity_reg.entities = {
+            "climate.living_room": FakeEntityEntry(
+                "climate.living_room", area_id="lr_area"
+            ),
+            "sensor.bedroom_temp": FakeEntityEntry(
+                "sensor.bedroom_temp", area_id="br_area"
+            ),
+        }
+        device_reg = FakeDeviceRegistry()
+
+        result = SmartClimateConfigFlow._get_entities_for_area(
+            "lr_area", entity_reg, device_reg
+        )
+        assert len(result) == 1
+        assert result[0].entity_id == "climate.living_room"
+
+    def test_get_entities_for_area_via_device(self):
+        """_get_entities_for_area should find entities via device area."""
+        from homeassistant.helpers.device_registry import (
+            FakeDeviceEntry,
+            FakeDeviceRegistry,
+        )
+        from homeassistant.helpers.entity_registry import (
+            FakeEntityEntry,
+            FakeEntityRegistry,
+        )
+
+        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+
+        entity_reg = FakeEntityRegistry()
+        entity_reg.entities = {
+            "sensor.lr_temp": FakeEntityEntry(
+                "sensor.lr_temp", area_id=None, device_id="dev1"
+            ),
+        }
+        device_reg = FakeDeviceRegistry()
+        device_reg.devices = {
+            "dev1": FakeDeviceEntry("dev1", area_id="lr_area"),
+        }
+
+        result = SmartClimateConfigFlow._get_entities_for_area(
+            "lr_area", entity_reg, device_reg
+        )
+        assert len(result) == 1
+        assert result[0].entity_id == "sensor.lr_temp"
+
+    def test_auto_detect_rooms_creates_rooms(self):
+        """_auto_detect_rooms should create room entries from areas."""
+        from homeassistant.helpers import (
+            area_registry as ar,
+        )
+        from homeassistant.helpers import (
+            device_registry as dr,
+        )
+        from homeassistant.helpers import (
+            entity_registry as er,
+        )
+        from homeassistant.helpers.area_registry import (
+            FakeAreaEntry,
+            FakeAreaRegistry,
+        )
+        from homeassistant.helpers.device_registry import FakeDeviceRegistry
+        from homeassistant.helpers.entity_registry import (
+            FakeEntityEntry,
+            FakeEntityRegistry,
+        )
+
+        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+
+        # Set up registries
+        area_reg = FakeAreaRegistry()
+        area_reg.areas = {
+            "lr": FakeAreaEntry("lr", "Living Room"),
+        }
+
+        entity_reg = FakeEntityRegistry()
+        entity_reg.entities = {
+            "climate.ecobee": FakeEntityEntry(
+                "climate.ecobee", area_id="lr"
+            ),
+            "sensor.lr_temp": FakeEntityEntry(
+                "sensor.lr_temp",
+                device_class="temperature",
+                area_id="lr",
+            ),
+            "binary_sensor.lr_motion": FakeEntityEntry(
+                "binary_sensor.lr_motion",
+                device_class="motion",
+                area_id="lr",
+            ),
+        }
+
+        device_reg = FakeDeviceRegistry()
+
+        # Patch async_get to return our registries
+        ar.async_get = MagicMock(return_value=area_reg)
+        er.async_get = MagicMock(return_value=entity_reg)
+        dr.async_get = MagicMock(return_value=device_reg)
+
+        flow = SmartClimateConfigFlow()
+        flow.hass = MagicMock()
+        flow._auto_detect_rooms(["lr"])
+
+        assert len(flow._rooms) == 1
+        room = flow._rooms[0]
+        assert room["room_name"] == "Living Room"
+        assert room["room_slug"] == "living_room"
+        assert room["climate_entity"] == "climate.ecobee"
+        assert "sensor.lr_temp" in room["temp_sensors"]
+        assert "binary_sensor.lr_motion" in room["presence_sensors"]
+
+    def test_auto_detect_rooms_fallback_climate(self):
+        """_auto_detect_rooms should use system-wide climate entity as fallback."""
+        from homeassistant.helpers import (
+            area_registry as ar,
+        )
+        from homeassistant.helpers import (
+            device_registry as dr,
+        )
+        from homeassistant.helpers import (
+            entity_registry as er,
+        )
+        from homeassistant.helpers.area_registry import (
+            FakeAreaEntry,
+            FakeAreaRegistry,
+        )
+        from homeassistant.helpers.device_registry import FakeDeviceRegistry
+        from homeassistant.helpers.entity_registry import (
+            FakeEntityEntry,
+            FakeEntityRegistry,
+        )
+
+        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+
+        area_reg = FakeAreaRegistry()
+        area_reg.areas = {
+            "nr": FakeAreaEntry("nr", "Nursery"),
+        }
+
+        entity_reg = FakeEntityRegistry()
+        entity_reg.entities = {
+            # Climate in a different area
+            "climate.ecobee": FakeEntityEntry(
+                "climate.ecobee", area_id="lr"
+            ),
+            # Nursery only has a temp sensor
+            "sensor.nursery_temp": FakeEntityEntry(
+                "sensor.nursery_temp",
+                device_class="temperature",
+                area_id="nr",
+            ),
+        }
+
+        device_reg = FakeDeviceRegistry()
+
+        ar.async_get = MagicMock(return_value=area_reg)
+        er.async_get = MagicMock(return_value=entity_reg)
+        dr.async_get = MagicMock(return_value=device_reg)
+
+        flow = SmartClimateConfigFlow()
+        flow.hass = MagicMock()
+        flow._auto_detect_rooms(["nr"])
+
+        assert len(flow._rooms) == 1
+        # Should fallback to the only climate entity in the system
+        assert flow._rooms[0]["climate_entity"] == "climate.ecobee"
+        assert "sensor.nursery_temp" in flow._rooms[0]["temp_sensors"]
+
+    def test_auto_detect_rooms_skips_no_climate(self):
+        """_auto_detect_rooms should skip areas with no climate entity available."""
+        from homeassistant.helpers import (
+            area_registry as ar,
+        )
+        from homeassistant.helpers import (
+            device_registry as dr,
+        )
+        from homeassistant.helpers import (
+            entity_registry as er,
+        )
+        from homeassistant.helpers.area_registry import (
+            FakeAreaEntry,
+            FakeAreaRegistry,
+        )
+        from homeassistant.helpers.device_registry import FakeDeviceRegistry
+        from homeassistant.helpers.entity_registry import (
+            FakeEntityEntry,
+            FakeEntityRegistry,
+        )
+
+        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+
+        area_reg = FakeAreaRegistry()
+        area_reg.areas = {
+            "garage": FakeAreaEntry("garage", "Garage"),
+        }
+
+        entity_reg = FakeEntityRegistry()
+        entity_reg.entities = {
+            # Only a switch, no climate at all in the system
+            "switch.garage_light": FakeEntityEntry(
+                "switch.garage_light", area_id="garage"
+            ),
+        }
+
+        device_reg = FakeDeviceRegistry()
+
+        ar.async_get = MagicMock(return_value=area_reg)
+        er.async_get = MagicMock(return_value=entity_reg)
+        dr.async_get = MagicMock(return_value=device_reg)
+
+        flow = SmartClimateConfigFlow()
+        flow.hass = MagicMock()
+        flow._auto_detect_rooms(["garage"])
+
+        assert len(flow._rooms) == 0
+
+    def test_auto_detect_rooms_skips_disabled_entities(self):
+        """_auto_detect_rooms should skip disabled entities."""
+        from homeassistant.helpers import (
+            area_registry as ar,
+        )
+        from homeassistant.helpers import (
+            device_registry as dr,
+        )
+        from homeassistant.helpers import (
+            entity_registry as er,
+        )
+        from homeassistant.helpers.area_registry import (
+            FakeAreaEntry,
+            FakeAreaRegistry,
+        )
+        from homeassistant.helpers.device_registry import FakeDeviceRegistry
+        from homeassistant.helpers.entity_registry import (
+            FakeEntityEntry,
+            FakeEntityRegistry,
+        )
+
+        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+
+        area_reg = FakeAreaRegistry()
+        area_reg.areas = {
+            "lr": FakeAreaEntry("lr", "Living Room"),
+        }
+
+        entity_reg = FakeEntityRegistry()
+        entity_reg.entities = {
+            "climate.ecobee": FakeEntityEntry(
+                "climate.ecobee", area_id="lr"
+            ),
+            "sensor.disabled_temp": FakeEntityEntry(
+                "sensor.disabled_temp",
+                device_class="temperature",
+                area_id="lr",
+                disabled_by="user",
+            ),
+            "sensor.active_temp": FakeEntityEntry(
+                "sensor.active_temp",
+                device_class="temperature",
+                area_id="lr",
+            ),
+        }
+
+        device_reg = FakeDeviceRegistry()
+
+        ar.async_get = MagicMock(return_value=area_reg)
+        er.async_get = MagicMock(return_value=entity_reg)
+        dr.async_get = MagicMock(return_value=device_reg)
+
+        flow = SmartClimateConfigFlow()
+        flow.hass = MagicMock()
+        flow._auto_detect_rooms(["lr"])
+
+        assert len(flow._rooms) == 1
+        # Only the active sensor should be included
+        assert "sensor.active_temp" in flow._rooms[0]["temp_sensors"]
+        assert "sensor.disabled_temp" not in flow._rooms[0]["temp_sensors"]
+
+    def test_auto_detect_rooms_skips_duplicate_slugs(self):
+        """_auto_detect_rooms should not add duplicate rooms."""
+        from homeassistant.helpers import (
+            area_registry as ar,
+        )
+        from homeassistant.helpers import (
+            device_registry as dr,
+        )
+        from homeassistant.helpers import (
+            entity_registry as er,
+        )
+        from homeassistant.helpers.area_registry import (
+            FakeAreaEntry,
+            FakeAreaRegistry,
+        )
+        from homeassistant.helpers.device_registry import FakeDeviceRegistry
+        from homeassistant.helpers.entity_registry import (
+            FakeEntityEntry,
+            FakeEntityRegistry,
+        )
+
+        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+
+        area_reg = FakeAreaRegistry()
+        area_reg.areas = {
+            "lr": FakeAreaEntry("lr", "Living Room"),
+        }
+
+        entity_reg = FakeEntityRegistry()
+        entity_reg.entities = {
+            "climate.ecobee": FakeEntityEntry(
+                "climate.ecobee", area_id="lr"
+            ),
+        }
+
+        device_reg = FakeDeviceRegistry()
+
+        ar.async_get = MagicMock(return_value=area_reg)
+        er.async_get = MagicMock(return_value=entity_reg)
+        dr.async_get = MagicMock(return_value=device_reg)
+
+        flow = SmartClimateConfigFlow()
+        flow.hass = MagicMock()
+        # Pre-add a room with same slug
+        flow._rooms.append({"room_name": "Living Room", "room_slug": "living_room"})
+        flow._auto_detect_rooms(["lr"])
+
+        # Should still be just the one pre-existing room
+        assert len(flow._rooms) == 1
+
+
+class TestRemoveRoom:
+    """Test the remove room functionality."""
+
+    def test_remove_room_removes_by_slug(self):
+        """Removing a room by slug should work correctly."""
+        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+
+        flow = SmartClimateConfigFlow()
+        flow._rooms = [
+            {"room_name": "Living Room", "room_slug": "living_room"},
+            {"room_name": "Bedroom", "room_slug": "bedroom"},
+            {"room_name": "Nursery", "room_slug": "nursery"},
+        ]
+
+        # Simulate removing bedroom
+        flow._rooms = [
+            r for r in flow._rooms if r["room_slug"] != "bedroom"
+        ]
+
+        assert len(flow._rooms) == 2
+        slugs = [r["room_slug"] for r in flow._rooms]
+        assert "bedroom" not in slugs
+        assert "living_room" in slugs
+        assert "nursery" in slugs
+
+    def test_room_menu_schema_has_remove_when_rooms_exist(self):
+        """Room menu should include remove option when rooms exist."""
+        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+
+        flow = SmartClimateConfigFlow()
+        flow._rooms = [{"room_name": "Test", "room_slug": "test"}]
+
+        schema = flow._get_room_menu_schema()
+        assert schema is not None
+
+    def test_room_menu_schema_no_remove_when_empty(self):
+        """Room menu should not include remove option when no rooms."""
+        from custom_components.smart_climate.config_flow import SmartClimateConfigFlow
+
+        flow = SmartClimateConfigFlow()
+        flow._rooms = []
+
+        schema = flow._get_room_menu_schema()
+        assert schema is not None

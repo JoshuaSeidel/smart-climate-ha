@@ -22,6 +22,7 @@ PLATFORMS_LIST: list[Platform] = [
     Platform.CLIMATE,
     Platform.SENSOR,
     Platform.BINARY_SENSOR,
+    Platform.SELECT,
 ]
 
 
@@ -56,8 +57,16 @@ async def _async_register_card(hass: HomeAssistant) -> None:
         _LOGGER.debug("Lovelace card JS not found at %s, skipping registration", card_file)
         return
 
-    # Serve the www/ directory at /smart_climate/
-    hass.http.register_static_path(CARD_URL, str(card_file), cache_headers=False)
+    # Serve the card JS file — use the modern async API (HA 2025.12+)
+    try:
+        from homeassistant.components.http import StaticPathConfig
+
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(url_path=CARD_URL, path=str(card_file), cache_headers=False)]
+        )
+    except (ImportError, AttributeError):
+        # Fallback for older HA versions
+        hass.http.register_static_path(CARD_URL, str(card_file), cache_headers=False)
 
     # Auto-register as a Lovelace resource so users don't have to
     _register_lovelace_resource(hass)

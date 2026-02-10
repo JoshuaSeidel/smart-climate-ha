@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 DOMAIN = "smart_climate"
-PLATFORMS = ["climate", "sensor", "binary_sensor"]
+PLATFORMS = ["climate", "sensor", "binary_sensor", "select"]
 
 # Config keys - General
 CONF_INTEGRATION_NAME = "integration_name"
@@ -52,6 +52,22 @@ CONF_AI_MODEL = "ai_model"
 CONF_AI_BASE_URL = "ai_base_url"
 CONF_AI_ANALYSIS_TIME = "ai_analysis_time"
 CONF_AI_AUTO_APPLY = "ai_auto_apply"
+
+# Config keys - Operation Mode
+CONF_OPERATION_MODE = "operation_mode"
+
+# Operation modes
+OPERATION_MODE_ACTIVE = "active"
+OPERATION_MODE_TRAINING = "training"
+OPERATION_MODE_DISABLED = "disabled"
+
+OPERATION_MODES = [
+    OPERATION_MODE_ACTIVE,
+    OPERATION_MODE_TRAINING,
+    OPERATION_MODE_DISABLED,
+]
+
+DEFAULT_OPERATION_MODE = OPERATION_MODE_TRAINING
 
 # Config keys - Advanced/Options
 CONF_COMFORT_TEMP_WEIGHT = "comfort_temp_weight"

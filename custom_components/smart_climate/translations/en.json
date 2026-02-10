@@ -9,7 +9,8 @@
           "temp_unit": "Temperature Unit",
           "update_interval": "Update Interval (seconds)",
           "enable_follow_me": "Enable Follow-Me Mode",
-          "enable_zone_balancing": "Enable Zone Balancing"
+          "enable_zone_balancing": "Enable Zone Balancing",
+          "operation_mode": "Operation Mode"
         }
       },
       "weather": {
@@ -20,9 +21,16 @@
           "outdoor_temp_sensor": "Outdoor Temperature Sensor"
         }
       },
+      "area_select": {
+        "title": "Select Rooms",
+        "description": "Select your Home Assistant areas to auto-detect rooms and their entities. Sensors, climate devices, and other entities assigned to each area will be automatically configured. You can add or remove rooms in the next step.",
+        "data": {
+          "areas": "Areas"
+        }
+      },
       "room_menu": {
         "title": "Room Setup",
-        "description": "You have configured {room_count} room(s). Add more rooms or finish.",
+        "description": "Configured rooms ({room_count}): {room_names}",
         "data": {
           "action": "Action"
         }
@@ -41,6 +49,13 @@
           "auxiliary_entities": "Auxiliary Devices (heaters, fans, portable ACs)",
           "room_priority": "Room Priority (1-10)",
           "target_temp_offset": "Target Temperature Offset"
+        }
+      },
+      "remove_room": {
+        "title": "Remove a Room",
+        "description": "Select a room to remove from the configuration.",
+        "data": {
+          "room_to_remove": "Room to Remove"
         }
       },
       "schedule_menu": {
@@ -94,6 +109,7 @@
           "update_interval": "Update Interval (seconds)",
           "enable_follow_me": "Enable Follow-Me Mode",
           "enable_zone_balancing": "Enable Zone Balancing",
+          "operation_mode": "Operation Mode",
           "ai_provider": "AI Provider",
           "ai_api_key": "API Key",
           "ai_model": "Model Name",

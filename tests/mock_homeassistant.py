@@ -34,6 +34,7 @@ def setup_mock_homeassistant():
         "CLIMATE": "climate",
         "SENSOR": "sensor",
         "BINARY_SENSOR": "binary_sensor",
+        "SELECT": "select",
     })()
     ha_const.UnitOfTemperature = type("UnitOfTemperature", (), {
         "FAHRENHEIT": "°F",
@@ -86,13 +87,14 @@ def setup_mock_homeassistant():
     # homeassistant.helpers.selector
     ha_selector = _create_module("homeassistant.helpers.selector")
     # Mock all selector classes used in config_flow
+    # Use MagicMock() instances so attribute access (e.g. .LIST) auto-generates
     for name in [
         "SelectSelector", "SelectSelectorConfig", "SelectOptionDict",
         "SelectSelectorMode", "NumberSelector", "NumberSelectorConfig",
         "NumberSelectorMode", "EntitySelector", "EntitySelectorConfig",
-        "TimeSelector",
+        "TimeSelector", "AreaSelector", "AreaSelectorConfig",
     ]:
-        setattr(ha_selector, name, MagicMock)
+        setattr(ha_selector, name, MagicMock())
 
     # homeassistant.helpers.config_validation
     ha_cv = _create_module("homeassistant.helpers.config_validation")
@@ -136,8 +138,95 @@ def setup_mock_homeassistant():
     ha_event = _create_module("homeassistant.helpers.event")
     ha_event.async_track_time_change = MagicMock(return_value=lambda: None)
 
+    # homeassistant.helpers.area_registry
+    ha_area_reg = _create_module("homeassistant.helpers.area_registry")
+
+    class FakeAreaEntry:
+        """Minimal AreaEntry stub."""
+        def __init__(self, area_id, name):
+            self.id = area_id
+            self.name = name
+
+    class FakeAreaRegistry:
+        """Minimal AreaRegistry stub."""
+        def __init__(self):
+            self.areas = {}
+
+        def async_list_areas(self):
+            return list(self.areas.values())
+
+        def async_get_area(self, area_id):
+            return self.areas.get(area_id)
+
+    ha_area_reg.AreaEntry = FakeAreaEntry
+    ha_area_reg.FakeAreaEntry = FakeAreaEntry
+    ha_area_reg.AreaRegistry = FakeAreaRegistry
+    ha_area_reg.FakeAreaRegistry = FakeAreaRegistry
+    ha_area_reg.async_get = MagicMock(return_value=FakeAreaRegistry())
+
+    # homeassistant.helpers.entity_registry
+    ha_entity_reg = _create_module("homeassistant.helpers.entity_registry")
+
+    class FakeEntityEntry:
+        """Minimal entity registry entry stub."""
+        def __init__(
+            self,
+            entity_id,
+            domain=None,
+            device_class=None,
+            original_device_class=None,
+            area_id=None,
+            device_id=None,
+            disabled_by=None,
+        ):
+            self.entity_id = entity_id
+            self.domain = domain or entity_id.split(".")[0]
+            self.device_class = device_class
+            self.original_device_class = original_device_class
+            self.area_id = area_id
+            self.device_id = device_id
+            self.disabled_by = disabled_by
+
+    class FakeEntityRegistry:
+        """Minimal EntityRegistry stub."""
+        def __init__(self):
+            self.entities = {}
+
+    ha_entity_reg.RegistryEntry = FakeEntityEntry
+    ha_entity_reg.FakeEntityEntry = FakeEntityEntry
+    ha_entity_reg.EntityRegistry = FakeEntityRegistry
+    ha_entity_reg.FakeEntityRegistry = FakeEntityRegistry
+    ha_entity_reg.async_get = MagicMock(return_value=FakeEntityRegistry())
+
+    # homeassistant.helpers.device_registry
+    ha_device_reg = _create_module("homeassistant.helpers.device_registry")
+
+    class FakeDeviceEntry:
+        """Minimal device registry entry stub."""
+        def __init__(self, device_id, area_id=None):
+            self.id = device_id
+            self.area_id = area_id
+
+    class FakeDeviceRegistry:
+        """Minimal DeviceRegistry stub."""
+        def __init__(self):
+            self.devices = {}
+
+        def async_get(self, device_id):
+            return self.devices.get(device_id)
+
+    ha_device_reg.DeviceEntry = FakeDeviceEntry
+    ha_device_reg.FakeDeviceEntry = FakeDeviceEntry
+    ha_device_reg.DeviceRegistry = FakeDeviceRegistry
+    ha_device_reg.FakeDeviceRegistry = FakeDeviceRegistry
+    ha_device_reg.async_get = MagicMock(return_value=FakeDeviceRegistry())
+
     # homeassistant.components
     _create_module("homeassistant.components")
+
+    # homeassistant.components.http
+    ha_http = _create_module("homeassistant.components.http")
+    ha_http.StaticPathConfig = MagicMock
 
     # homeassistant.components.sensor
     ha_sensor = _create_module("homeassistant.components.sensor")
@@ -186,6 +275,14 @@ def setup_mock_homeassistant():
         "DRYING": "drying",
         "FAN": "fan",
     })()
+
+    # homeassistant.components.select
+    ha_select = _create_module("homeassistant.components.select")
+    ha_select.SelectEntity = type("SelectEntity", (), {})
+
+    # homeassistant.helpers.entity_platform
+    ha_entity_platform = _create_module("homeassistant.helpers.entity_platform")
+    ha_entity_platform.AddEntitiesCallback = MagicMock
 
     # homeassistant.components.recorder
     _create_module("homeassistant.components.recorder")

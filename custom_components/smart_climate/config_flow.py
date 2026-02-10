@@ -9,7 +9,18 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import selector
+from homeassistant.helpers import (
+    area_registry as ar,
+)
+from homeassistant.helpers import (
+    device_registry as dr,
+)
+from homeassistant.helpers import (
+    entity_registry as er,
+)
+from homeassistant.helpers import (
+    selector,
+)
 
 from .const import (
     AI_PROVIDER_NONE,
@@ -27,6 +38,7 @@ from .const import (
     CONF_ENABLE_ZONE_BALANCING,
     CONF_HUMIDITY_SENSORS,
     CONF_INTEGRATION_NAME,
+    CONF_OPERATION_MODE,
     CONF_OUTDOOR_TEMP_SENSOR,
     CONF_PRESENCE_SENSORS,
     CONF_ROOM_NAME,
@@ -56,6 +68,7 @@ from .const import (
     DEFAULT_ENABLE_FOLLOW_ME,
     DEFAULT_ENABLE_ZONE_BALANCING,
     DEFAULT_NAME,
+    DEFAULT_OPERATION_MODE,
     DEFAULT_ROOM_PRIORITY,
     DEFAULT_TARGET_TEMP_OFFSET,
     DEFAULT_TEMP_UNIT,
@@ -65,6 +78,10 @@ from .const import (
 from .models import slugify
 
 _LOGGER = logging.getLogger(__name__)
+
+# Device classes used for auto-detection
+_PRESENCE_DEVICE_CLASSES = {"motion", "occupancy", "presence"}
+_DOOR_WINDOW_DEVICE_CLASSES = {"door", "window", "opening", "garage_door"}
 
 
 class SmartClimateConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -83,6 +100,8 @@ class SmartClimateConfigFlow(ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry: ConfigEntry) -> SmartClimateOptionsFlow:
         """Get the options flow."""
         return SmartClimateOptionsFlow(config_entry)
+
+    # ── Step 1: General Settings ──────────────────────────────────────
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -126,10 +145,33 @@ class SmartClimateConfigFlow(ConfigFlow, domain=DOMAIN):
                         CONF_ENABLE_ZONE_BALANCING,
                         default=DEFAULT_ENABLE_ZONE_BALANCING,
                     ): bool,
+                    vol.Required(
+                        CONF_OPERATION_MODE, default=DEFAULT_OPERATION_MODE
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(
+                                    value="training",
+                                    label="Training (observe only, collect data)",
+                                ),
+                                selector.SelectOptionDict(
+                                    value="active",
+                                    label="Active (full climate control)",
+                                ),
+                                selector.SelectOptionDict(
+                                    value="disabled",
+                                    label="Disabled (paused)",
+                                ),
+                            ],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
                 }
             ),
             errors=errors,
         )
+
+    # ── Step 2: Outdoor Weather ───────────────────────────────────────
 
     async def async_step_weather(
         self, user_input: dict[str, Any] | None = None
@@ -137,7 +179,7 @@ class SmartClimateConfigFlow(ConfigFlow, domain=DOMAIN):
         """Step 2: Outdoor weather source."""
         if user_input is not None:
             self._data.update(user_input)
-            return await self.async_step_room_menu()
+            return await self.async_step_area_select()
 
         return self.async_show_form(
             step_id="weather",
@@ -153,70 +195,226 @@ class SmartClimateConfigFlow(ConfigFlow, domain=DOMAIN):
             ),
         )
 
+    # ── Step 3: Area Auto-Detection ───────────────────────────────────
+
+    async def async_step_area_select(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Step 3: Select HA areas to auto-detect rooms."""
+        if user_input is not None:
+            selected_areas = user_input.get("areas", [])
+            if selected_areas:
+                self._auto_detect_rooms(selected_areas)
+            return await self.async_step_room_menu()
+
+        # Try to get areas from HA
+        try:
+            area_reg = ar.async_get(self.hass)
+            areas = list(area_reg.async_list_areas())
+        except Exception:
+            areas = []
+
+        if not areas:
+            # No areas defined, go straight to manual room setup
+            return await self.async_step_room_menu()
+
+        return self.async_show_form(
+            step_id="area_select",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        "areas",
+                        default=[a.id for a in areas],
+                    ): selector.AreaSelector(
+                        selector.AreaSelectorConfig(multiple=True)
+                    ),
+                }
+            ),
+        )
+
+    def _auto_detect_rooms(self, area_ids: list[str]) -> None:
+        """Auto-detect room entities from selected HA areas."""
+        area_reg = ar.async_get(self.hass)
+        entity_reg = er.async_get(self.hass)
+        device_reg = dr.async_get(self.hass)
+
+        # Collect all climate entities for fallback assignment
+        all_climate_entities = [
+            entry.entity_id
+            for entry in entity_reg.entities.values()
+            if entry.domain == "climate" and not entry.disabled_by
+        ]
+
+        for area_id in area_ids:
+            area = area_reg.async_get_area(area_id)
+            if not area:
+                continue
+
+            # Find all entities assigned to this area
+            area_entities = self._get_entities_for_area(
+                area_id, entity_reg, device_reg
+            )
+
+            # Categorize by domain and device class
+            climate = [
+                e for e in area_entities
+                if e.domain == "climate" and not e.disabled_by
+            ]
+            temp = [
+                e for e in area_entities
+                if e.domain == "sensor"
+                and self._get_device_class(e) == "temperature"
+                and not e.disabled_by
+            ]
+            humidity = [
+                e for e in area_entities
+                if e.domain == "sensor"
+                and self._get_device_class(e) == "humidity"
+                and not e.disabled_by
+            ]
+            presence = [
+                e for e in area_entities
+                if e.domain == "binary_sensor"
+                and self._get_device_class(e) in _PRESENCE_DEVICE_CLASSES
+                and not e.disabled_by
+            ]
+            door_window = [
+                e for e in area_entities
+                if e.domain == "binary_sensor"
+                and self._get_device_class(e) in _DOOR_WINDOW_DEVICE_CLASSES
+                and not e.disabled_by
+            ]
+            vents = [
+                e for e in area_entities
+                if e.domain in ("cover", "number") and not e.disabled_by
+            ]
+
+            # Determine climate entity: prefer one in this area, fallback to system-wide
+            climate_entity = ""
+            if climate:
+                climate_entity = climate[0].entity_id
+            elif all_climate_entities:
+                climate_entity = all_climate_entities[0]
+
+            if not climate_entity:
+                # No climate entity available anywhere, skip this room
+                continue
+
+            # Check for duplicate slug
+            room_slug = slugify(area.name)
+            existing_slugs = {r[CONF_ROOM_SLUG] for r in self._rooms}
+            if room_slug in existing_slugs:
+                continue
+
+            room_data = {
+                CONF_ROOM_NAME: area.name,
+                CONF_ROOM_SLUG: room_slug,
+                CONF_CLIMATE_ENTITY: climate_entity,
+                CONF_TEMP_SENSORS: [e.entity_id for e in temp],
+                CONF_HUMIDITY_SENSORS: [e.entity_id for e in humidity],
+                CONF_PRESENCE_SENSORS: [e.entity_id for e in presence],
+                CONF_DOOR_WINDOW_SENSORS: [e.entity_id for e in door_window],
+                CONF_VENT_ENTITIES: [e.entity_id for e in vents],
+                CONF_AUXILIARY_ENTITIES: [],
+                CONF_ROOM_PRIORITY: DEFAULT_ROOM_PRIORITY,
+                CONF_TARGET_TEMP_OFFSET: DEFAULT_TARGET_TEMP_OFFSET,
+            }
+            self._rooms.append(room_data)
+
+    @staticmethod
+    def _get_entities_for_area(
+        area_id: str, entity_reg: er.EntityRegistry, device_reg: dr.DeviceRegistry
+    ) -> list:
+        """Get all entities belonging to an area (directly or via device)."""
+        entities = []
+        for entity in entity_reg.entities.values():
+            entity_area = entity.area_id
+            if not entity_area and entity.device_id:
+                device = device_reg.async_get(entity.device_id)
+                if device:
+                    entity_area = device.area_id
+            if entity_area == area_id:
+                entities.append(entity)
+        return entities
+
+    @staticmethod
+    def _get_device_class(entity: Any) -> str | None:
+        """Get device class from an entity registry entry."""
+        return getattr(entity, "device_class", None) or getattr(
+            entity, "original_device_class", None
+        )
+
+    # ── Step 4: Room Menu ─────────────────────────────────────────────
+
     async def async_step_room_menu(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Step 3: Room menu - add rooms or finish."""
+        """Step 4: Room menu - add/remove rooms or finish."""
         if user_input is not None:
-            if user_input.get("action") == "add_room":
+            action = user_input.get("action")
+            if action == "add_room":
                 return await self.async_step_add_room()
-            if user_input.get("action") == "finish_rooms":
+            if action == "remove_room":
+                return await self.async_step_remove_room()
+            if action == "finish_rooms":
                 if not self._rooms:
                     return self.async_show_form(
                         step_id="room_menu",
-                        data_schema=vol.Schema(
-                            {
-                                vol.Required("action"): selector.SelectSelector(
-                                    selector.SelectSelectorConfig(
-                                        options=[
-                                            selector.SelectOptionDict(
-                                                value="add_room",
-                                                label="Add a Room",
-                                            ),
-                                            selector.SelectOptionDict(
-                                                value="finish_rooms",
-                                                label="Finish Room Setup",
-                                            ),
-                                        ],
-                                        mode=selector.SelectSelectorMode.LIST,
-                                    )
-                                )
-                            }
-                        ),
+                        data_schema=self._get_room_menu_schema(),
                         errors={"base": "min_one_room"},
                     )
                 return await self.async_step_schedule_menu()
 
         room_count = len(self._rooms)
-        description_placeholders = {"room_count": str(room_count)}
+        room_names = (
+            ", ".join(r[CONF_ROOM_NAME] for r in self._rooms)
+            if self._rooms
+            else "None"
+        )
+        description_placeholders = {
+            "room_count": str(room_count),
+            "room_names": room_names,
+        }
 
         return self.async_show_form(
             step_id="room_menu",
-            data_schema=vol.Schema(
-                {
-                    vol.Required("action"): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=[
-                                selector.SelectOptionDict(
-                                    value="add_room", label="Add a Room"
-                                ),
-                                selector.SelectOptionDict(
-                                    value="finish_rooms",
-                                    label="Finish Room Setup",
-                                ),
-                            ],
-                            mode=selector.SelectSelectorMode.LIST,
-                        )
-                    )
-                }
-            ),
+            data_schema=self._get_room_menu_schema(),
             description_placeholders=description_placeholders,
         )
+
+    def _get_room_menu_schema(self) -> vol.Schema:
+        """Build the room menu schema with dynamic options."""
+        options = [
+            selector.SelectOptionDict(value="add_room", label="Add a Room"),
+        ]
+        if self._rooms:
+            options.append(
+                selector.SelectOptionDict(
+                    value="remove_room", label="Remove a Room"
+                )
+            )
+        options.append(
+            selector.SelectOptionDict(
+                value="finish_rooms", label="Finish Room Setup"
+            )
+        )
+        return vol.Schema(
+            {
+                vol.Required("action"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=options,
+                        mode=selector.SelectSelectorMode.LIST,
+                    )
+                )
+            }
+        )
+
+    # ── Step 5: Add Room ──────────────────────────────────────────────
 
     async def async_step_add_room(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Step 4: Add a room."""
+        """Add a room manually."""
         if user_input is not None:
             room_data = {
                 CONF_ROOM_NAME: user_input[CONF_ROOM_NAME],
@@ -314,10 +512,47 @@ class SmartClimateConfigFlow(ConfigFlow, domain=DOMAIN):
             ),
         )
 
+    # ── Step 6: Remove Room ───────────────────────────────────────────
+
+    async def async_step_remove_room(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Remove a room from the list."""
+        if user_input is not None:
+            room_slug = user_input.get("room_to_remove")
+            if room_slug:
+                self._rooms = [
+                    r for r in self._rooms if r[CONF_ROOM_SLUG] != room_slug
+                ]
+            return await self.async_step_room_menu()
+
+        room_options = [
+            selector.SelectOptionDict(
+                value=r[CONF_ROOM_SLUG], label=r[CONF_ROOM_NAME]
+            )
+            for r in self._rooms
+        ]
+
+        return self.async_show_form(
+            step_id="remove_room",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("room_to_remove"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=room_options,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }
+            ),
+        )
+
+    # ── Step 7: Schedule Menu ─────────────────────────────────────────
+
     async def async_step_schedule_menu(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Step 5: Schedule menu."""
+        """Schedule menu."""
         if user_input is not None:
             action = user_input.get("action")
             if action == "add_schedule":
@@ -355,6 +590,8 @@ class SmartClimateConfigFlow(ConfigFlow, domain=DOMAIN):
             ),
             description_placeholders=description_placeholders,
         )
+
+    # ── Step 8: Add Schedule ──────────────────────────────────────────
 
     async def async_step_add_schedule(
         self, user_input: dict[str, Any] | None = None
@@ -461,10 +698,12 @@ class SmartClimateConfigFlow(ConfigFlow, domain=DOMAIN):
             ),
         )
 
+    # ── Step 9: AI Provider ───────────────────────────────────────────
+
     async def async_step_ai_provider(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Step 6: AI Provider configuration."""
+        """AI Provider configuration."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -582,6 +821,30 @@ class SmartClimateOptionsFlow(OptionsFlow):
                             DEFAULT_ENABLE_ZONE_BALANCING,
                         ),
                     ): bool,
+                    vol.Required(
+                        CONF_OPERATION_MODE,
+                        default=data.get(
+                            CONF_OPERATION_MODE, DEFAULT_OPERATION_MODE
+                        ),
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(
+                                    value="training",
+                                    label="Training (observe only)",
+                                ),
+                                selector.SelectOptionDict(
+                                    value="active",
+                                    label="Active (full control)",
+                                ),
+                                selector.SelectOptionDict(
+                                    value="disabled",
+                                    label="Disabled (paused)",
+                                ),
+                            ],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
                     vol.Optional(
                         CONF_AI_PROVIDER,
                         default=data.get(CONF_AI_PROVIDER, AI_PROVIDER_NONE),

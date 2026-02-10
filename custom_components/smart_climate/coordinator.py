@@ -26,6 +26,7 @@ from .const import (
     CONF_ENABLE_FOLLOW_ME,
     CONF_ENABLE_ZONE_BALANCING,
     CONF_FOLLOW_ME_COOLDOWN,
+    CONF_OPERATION_MODE,
     CONF_OUTDOOR_TEMP_SENSOR,
     CONF_ROOMS,
     CONF_SCHEDULES,
@@ -41,6 +42,7 @@ from .const import (
     DEFAULT_ENABLE_FOLLOW_ME,
     DEFAULT_ENABLE_ZONE_BALANCING,
     DEFAULT_FOLLOW_ME_COOLDOWN,
+    DEFAULT_OPERATION_MODE,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     EVENT_AUXILIARY_ACTIVATED,
@@ -50,6 +52,8 @@ from .const import (
     EVENT_SCHEDULE_ACTIVATED,
     EVENT_SCHEDULE_DEACTIVATED,
     EVENT_WINDOW_OPEN_ADJUSTED,
+    OPERATION_MODE_ACTIVE,
+    OPERATION_MODE_DISABLED,
 )
 from .helpers.auxiliary import (
     async_disengage_auxiliary,
@@ -145,6 +149,12 @@ class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Previous follow-me target (for change detection / events)
         self._prev_follow_me_target: str | None = None
 
+        # Operation mode: "active" (full control), "training" (observe only),
+        # "disabled" (paused). Can be changed at runtime via the select entity.
+        self.operation_mode: str = entry.data.get(
+            CONF_OPERATION_MODE, DEFAULT_OPERATION_MODE
+        )
+
         interval = entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
 
         super().__init__(
@@ -162,7 +172,11 @@ class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Poll all tracked entities and recompute state."""
         now = datetime.now()
 
-        # ---- per-room updates ----------------------------------------
+        # If disabled, skip all processing
+        if self.operation_mode == OPERATION_MODE_DISABLED:
+            return {"rooms": self._room_states, "house": self._house_state}
+
+        # ---- per-room updates (always run: data collection) ----------
         for slug, room_cfg in self.room_configs.items():
             try:
                 self._update_room(slug, room_cfg, now)
@@ -173,37 +187,43 @@ class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         rooms = self._room_states
 
-        # ---- follow-me logic -----------------------------------------
+        # In training mode, we collect data and compute scores but
+        # do NOT apply follow-me, zone balancing, auxiliary, or vent changes.
+        is_active = self.operation_mode == OPERATION_MODE_ACTIVE
+
+        # ---- follow-me logic (active mode only) ----------------------
         enable_follow_me = self.entry.data.get(
             CONF_ENABLE_FOLLOW_ME, DEFAULT_ENABLE_FOLLOW_ME
         )
-        if enable_follow_me:
+        if is_active and enable_follow_me:
             try:
                 self._run_follow_me(rooms, now)
             except Exception:
                 _LOGGER.exception("Error running follow-me logic")
 
-        # ---- schedule engine -----------------------------------------
-        try:
-            self._run_schedules(rooms, now)
-        except Exception:
-            _LOGGER.exception("Error running schedule engine")
+        # ---- schedule engine (active mode only) ----------------------
+        if is_active:
+            try:
+                self._run_schedules(rooms, now)
+            except Exception:
+                _LOGGER.exception("Error running schedule engine")
 
-        # ---- zone balancing / vents ----------------------------------
+        # ---- zone balancing / vents (active mode only) ---------------
         enable_zone_balancing = self.entry.data.get(
             CONF_ENABLE_ZONE_BALANCING, DEFAULT_ENABLE_ZONE_BALANCING
         )
-        if enable_zone_balancing:
+        if is_active and enable_zone_balancing:
             try:
                 await self._run_zone_balancing(rooms)
             except Exception:
                 _LOGGER.exception("Error running zone balancing")
 
-        # ---- auxiliary devices ---------------------------------------
-        try:
-            await self._run_auxiliary_logic(rooms, now)
-        except Exception:
-            _LOGGER.exception("Error running auxiliary device logic")
+        # ---- auxiliary devices (active mode only) --------------------
+        if is_active:
+            try:
+                await self._run_auxiliary_logic(rooms, now)
+            except Exception:
+                _LOGGER.exception("Error running auxiliary device logic")
 
         # ---- house-level aggregation ---------------------------------
         try:
