@@ -14,9 +14,9 @@ AI-powered climate control for Home Assistant. Works with **any** climate entity
 - **5 AI providers** — OpenAI, Anthropic, Ollama (local), Google Gemini, xAI Grok
 - **Custom Lovelace card** — room grid, schedule timeline, AI suggestion panel with approve/reject buttons
 
-## Installation
+## Installation (HACS)
 
-### Integration (HACS)
+The integration and Lovelace card are installed together — one repo, one install.
 
 1. Open HACS in Home Assistant
 2. Click the **three dots** menu (top right) → **Custom repositories**
@@ -36,46 +36,28 @@ AI-powered climate control for Home Assistant. Works with **any** climate entity
    - Add schedules (optional)
    - AI provider (optional)
 
-### Lovelace Card (HACS)
+The custom Lovelace card is bundled with the integration and auto-registered — no separate install needed. After setup, add it to any dashboard:
 
-1. Open HACS in Home Assistant
-2. Click the **three dots** menu (top right) → **Custom repositories**
-3. Add the same repository URL:
-   ```
-   https://github.com/JoshuaSeidel/smart-climate-ha
-   ```
-4. Select category: **Plugin** (Lovelace)
-5. Click **Add**
-6. Search for **Smart Climate Card** in HACS → **Download**
-7. Restart Home Assistant
-8. Add the card to a dashboard:
-   ```yaml
-   type: custom:smart-climate-card
-   entity: sensor.sc_house_comfort
-   show_schedule: true
-   show_suggestions: true
-   show_efficiency: true
-   ```
+```yaml
+type: custom:smart-climate-card
+entity: sensor.sc_house_comfort
+show_schedule: true
+show_suggestions: true
+show_efficiency: true
+```
 
 ### Manual Installation
 
-**Integration:**
-Copy `custom_components/smart_climate/` into your Home Assistant `config/custom_components/` directory and restart.
+**Integration + Card:**
+Copy `custom_components/smart_climate/` into your Home Assistant `config/custom_components/` directory and restart. The card JS is served automatically from `custom_components/smart_climate/www/`.
 
-**Card:**
-1. Build the card:
-   ```bash
-   cd smart-climate-card
-   npm install
-   npm run build
-   ```
-2. Copy `smart-climate-card/dist/smart-climate-card.js` to `config/www/`
-3. Add as a Lovelace resource:
-   ```yaml
-   resources:
-     - url: /local/smart-climate-card.js
-       type: module
-   ```
+**Building the card from source** (for development):
+```bash
+cd smart-climate-card
+npm install
+npm run build
+cp dist/smart-climate-card.js ../custom_components/smart_climate/www/
+```
 
 ## Card Configuration
 
