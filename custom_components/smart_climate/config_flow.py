@@ -804,6 +804,7 @@ class SmartClimateOptionsFlow(OptionsFlow):
         self._rooms: list[dict[str, Any]] = list(
             config_entry.data.get(CONF_ROOMS, [])
         )
+        self._editing_room_index: int | None = None
 
     # ── Options Menu ──────────────────────────────────────────────────
 
@@ -932,6 +933,8 @@ class SmartClimateOptionsFlow(OptionsFlow):
                 return await self.async_step_options_area_select()
             if action == "add_room":
                 return await self.async_step_options_add_room()
+            if action == "edit_room":
+                return await self.async_step_options_select_room()
             if action == "remove_room":
                 return await self.async_step_options_remove_room()
             if action == "done_rooms":
@@ -955,6 +958,11 @@ class SmartClimateOptionsFlow(OptionsFlow):
             ),
         ]
         if self._rooms:
+            options.append(
+                selector.SelectOptionDict(
+                    value="edit_room", label="Edit a Room"
+                )
+            )
             options.append(
                 selector.SelectOptionDict(
                     value="remove_room", label="Remove a Room"
@@ -1115,6 +1123,169 @@ class SmartClimateOptionsFlow(OptionsFlow):
                     ),
                 }
             ),
+        )
+
+    async def async_step_options_select_room(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Select a room to edit (options flow)."""
+        if user_input is not None:
+            room_slug = user_input.get("room_to_edit")
+            for idx, room in enumerate(self._rooms):
+                if room.get(CONF_ROOM_SLUG) == room_slug:
+                    self._editing_room_index = idx
+                    return await self.async_step_options_edit_room()
+            return await self.async_step_manage_rooms()
+
+        room_options = [
+            selector.SelectOptionDict(
+                value=r[CONF_ROOM_SLUG], label=r[CONF_ROOM_NAME]
+            )
+            for r in self._rooms
+        ]
+
+        return self.async_show_form(
+            step_id="options_select_room",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("room_to_edit"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=room_options,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_options_edit_room(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Edit an existing room's configuration (options flow)."""
+        idx = self._editing_room_index
+        if idx is None or idx >= len(self._rooms):
+            return await self.async_step_manage_rooms()
+
+        room = self._rooms[idx]
+
+        if user_input is not None:
+            # Update the room in-place, preserve slug
+            room[CONF_ROOM_NAME] = user_input[CONF_ROOM_NAME]
+            room[CONF_CLIMATE_ENTITY] = user_input[CONF_CLIMATE_ENTITY]
+            room[CONF_TEMP_SENSORS] = user_input.get(CONF_TEMP_SENSORS, [])
+            room[CONF_HUMIDITY_SENSORS] = user_input.get(CONF_HUMIDITY_SENSORS, [])
+            room[CONF_PRESENCE_SENSORS] = user_input.get(CONF_PRESENCE_SENSORS, [])
+            room[CONF_DOOR_WINDOW_SENSORS] = user_input.get(
+                CONF_DOOR_WINDOW_SENSORS, []
+            )
+            room[CONF_VENT_ENTITIES] = user_input.get(CONF_VENT_ENTITIES, [])
+            room[CONF_AUXILIARY_ENTITIES] = user_input.get(
+                CONF_AUXILIARY_ENTITIES, []
+            )
+            room[CONF_ROOM_PRIORITY] = user_input.get(
+                CONF_ROOM_PRIORITY, DEFAULT_ROOM_PRIORITY
+            )
+            room[CONF_TARGET_TEMP_OFFSET] = user_input.get(
+                CONF_TARGET_TEMP_OFFSET, DEFAULT_TARGET_TEMP_OFFSET
+            )
+            self._editing_room_index = None
+            return await self.async_step_manage_rooms()
+
+        return self.async_show_form(
+            step_id="options_edit_room",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_ROOM_NAME, default=room.get(CONF_ROOM_NAME, "")
+                    ): str,
+                    vol.Required(
+                        CONF_CLIMATE_ENTITY,
+                        default=room.get(CONF_CLIMATE_ENTITY, ""),
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="climate")
+                    ),
+                    vol.Optional(
+                        CONF_TEMP_SENSORS,
+                        default=room.get(CONF_TEMP_SENSORS, []),
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(
+                            domain="sensor",
+                            device_class="temperature",
+                            multiple=True,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_HUMIDITY_SENSORS,
+                        default=room.get(CONF_HUMIDITY_SENSORS, []),
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(
+                            domain="sensor",
+                            device_class="humidity",
+                            multiple=True,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_PRESENCE_SENSORS,
+                        default=room.get(CONF_PRESENCE_SENSORS, []),
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(
+                            domain="binary_sensor",
+                            device_class="motion",
+                            multiple=True,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_DOOR_WINDOW_SENSORS,
+                        default=room.get(CONF_DOOR_WINDOW_SENSORS, []),
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(
+                            domain="binary_sensor",
+                            multiple=True,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_VENT_ENTITIES,
+                        default=room.get(CONF_VENT_ENTITIES, []),
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(
+                            domain=["cover", "switch", "number"],
+                            multiple=True,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_AUXILIARY_ENTITIES,
+                        default=room.get(CONF_AUXILIARY_ENTITIES, []),
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(
+                            domain=["climate", "switch", "fan"],
+                            multiple=True,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_ROOM_PRIORITY,
+                        default=room.get(CONF_ROOM_PRIORITY, DEFAULT_ROOM_PRIORITY),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=1, max=10, step=1,
+                            mode=selector.NumberSelectorMode.SLIDER,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_TARGET_TEMP_OFFSET,
+                        default=room.get(
+                            CONF_TARGET_TEMP_OFFSET, DEFAULT_TARGET_TEMP_OFFSET
+                        ),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=-10.0, max=10.0, step=0.5,
+                            unit_of_measurement="°",
+                        )
+                    ),
+                }
+            ),
+            description_placeholders={
+                "room_name": room.get(CONF_ROOM_NAME, ""),
+            },
         )
 
     async def async_step_options_remove_room(

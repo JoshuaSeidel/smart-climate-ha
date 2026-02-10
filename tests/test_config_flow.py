@@ -877,3 +877,85 @@ class TestOptionsFlowMenu:
         ]
         assert len(flow._rooms) == 1
         assert flow._rooms[0]["room_slug"] == "living_room"
+
+    def test_options_flow_has_select_room_step(self):
+        """Options flow should have async_step_options_select_room."""
+        flow = self._make_options_flow()
+        assert hasattr(flow, "async_step_options_select_room")
+        assert callable(flow.async_step_options_select_room)
+
+    def test_options_flow_has_edit_room_step(self):
+        """Options flow should have async_step_options_edit_room."""
+        flow = self._make_options_flow()
+        assert hasattr(flow, "async_step_options_edit_room")
+        assert callable(flow.async_step_options_edit_room)
+
+    def test_options_flow_editing_room_index_init(self):
+        """Options flow should initialize _editing_room_index to None."""
+        flow = self._make_options_flow()
+        assert flow._editing_room_index is None
+
+    def test_options_flow_edit_room_updates_in_place(self):
+        """Editing a room should update it in-place, preserving slug."""
+        from custom_components.smart_climate.const import (
+            CONF_AUXILIARY_ENTITIES,
+            CONF_CLIMATE_ENTITY,
+            CONF_DOOR_WINDOW_SENSORS,
+            CONF_HUMIDITY_SENSORS,
+            CONF_PRESENCE_SENSORS,
+            CONF_ROOM_NAME,
+            CONF_ROOM_PRIORITY,
+            CONF_ROOM_SLUG,
+            CONF_TARGET_TEMP_OFFSET,
+            CONF_TEMP_SENSORS,
+            CONF_VENT_ENTITIES,
+        )
+
+        rooms = [
+            {
+                CONF_ROOM_NAME: "Living Room",
+                CONF_ROOM_SLUG: "living_room",
+                CONF_CLIMATE_ENTITY: "climate.old",
+                CONF_TEMP_SENSORS: ["sensor.old_temp"],
+                CONF_HUMIDITY_SENSORS: [],
+                CONF_PRESENCE_SENSORS: [],
+                CONF_DOOR_WINDOW_SENSORS: [],
+                CONF_VENT_ENTITIES: [],
+                CONF_AUXILIARY_ENTITIES: [],
+                CONF_ROOM_PRIORITY: 5,
+                CONF_TARGET_TEMP_OFFSET: 0.0,
+            },
+        ]
+        flow = self._make_options_flow(rooms=rooms)
+
+        # Simulate selecting room to edit
+        flow._editing_room_index = 0
+        room = flow._rooms[0]
+
+        # Simulate user submitting updated values
+        room[CONF_ROOM_NAME] = "Updated Living Room"
+        room[CONF_CLIMATE_ENTITY] = "climate.new"
+        room[CONF_TEMP_SENSORS] = ["sensor.new_temp"]
+        room[CONF_ROOM_PRIORITY] = 8
+
+        assert flow._rooms[0][CONF_ROOM_NAME] == "Updated Living Room"
+        assert flow._rooms[0][CONF_CLIMATE_ENTITY] == "climate.new"
+        assert flow._rooms[0][CONF_TEMP_SENSORS] == ["sensor.new_temp"]
+        assert flow._rooms[0][CONF_ROOM_PRIORITY] == 8
+        # Slug should be preserved
+        assert flow._rooms[0][CONF_ROOM_SLUG] == "living_room"
+
+    def test_options_flow_edit_preserves_other_rooms(self):
+        """Editing one room should not affect other rooms."""
+        rooms = [
+            {"room_name": "Living Room", "room_slug": "living_room",
+             "climate_entity": "climate.lr"},
+            {"room_name": "Bedroom", "room_slug": "bedroom",
+             "climate_entity": "climate.br"},
+        ]
+        flow = self._make_options_flow(rooms=rooms)
+        flow._editing_room_index = 0
+        flow._rooms[0]["room_name"] = "Updated"
+
+        assert flow._rooms[1]["room_name"] == "Bedroom"
+        assert flow._rooms[1]["climate_entity"] == "climate.br"

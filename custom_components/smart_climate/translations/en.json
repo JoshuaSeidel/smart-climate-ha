@@ -150,6 +150,29 @@
           "target_temp_offset": "Target Temperature Offset"
         }
       },
+      "options_select_room": {
+        "title": "Select a Room to Edit",
+        "description": "Choose which room to configure.",
+        "data": {
+          "room_to_edit": "Room"
+        }
+      },
+      "options_edit_room": {
+        "title": "Edit Room: {room_name}",
+        "description": "Update sensors and devices for this room.",
+        "data": {
+          "room_name": "Room Name",
+          "climate_entity": "Climate Entity (thermostat/zone)",
+          "temp_sensors": "Temperature Sensors",
+          "humidity_sensors": "Humidity Sensors",
+          "presence_sensors": "Presence/Motion Sensors",
+          "door_window_sensors": "Door/Window Contact Sensors",
+          "vent_entities": "Smart Vent Entities",
+          "auxiliary_entities": "Auxiliary Devices (heaters, fans, portable ACs)",
+          "room_priority": "Room Priority (1-10)",
+          "target_temp_offset": "Target Temperature Offset"
+        }
+      },
       "options_remove_room": {
         "title": "Remove a Room",
         "description": "Select a room to remove from the configuration.",
