@@ -476,7 +476,6 @@ class SmartClimateConfigFlow(ConfigFlow, domain=DOMAIN):
                     vol.Optional(CONF_PRESENCE_SENSORS): selector.EntitySelector(
                         selector.EntitySelectorConfig(
                             domain="binary_sensor",
-                            device_class="motion",
                             multiple=True,
                         )
                     ),
@@ -1079,7 +1078,6 @@ class SmartClimateOptionsFlow(OptionsFlow):
                     vol.Optional(CONF_PRESENCE_SENSORS): selector.EntitySelector(
                         selector.EntitySelectorConfig(
                             domain="binary_sensor",
-                            device_class="motion",
                             multiple=True,
                         )
                     ),
