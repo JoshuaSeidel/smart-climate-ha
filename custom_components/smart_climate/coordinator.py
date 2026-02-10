@@ -746,34 +746,24 @@ class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         try:
             # Import lazily to avoid circular / heavy imports at startup
-            from .helpers.ai import async_run_analysis  # type: ignore[import-not-found]
+            from .ai import async_run_analysis
 
-            result = await async_run_analysis(
-                hass=self.hass,
-                entry=self.entry,
-                rooms=self._room_states,
-                house=self._house_state,
+            await async_run_analysis(hass=self.hass, coordinator=self)
+
+            self._house_state.last_analysis_time = datetime.now()
+
+            self.hass.bus.async_fire(
+                f"{DOMAIN}_analysis_complete",
+                {
+                    "provider": provider,
+                    "suggestion_count": len(
+                        [s for s in self._house_state.suggestions if s.status == SUGGESTION_PENDING]
+                    ),
+                },
             )
 
-            if result:
-                self._house_state.last_analysis_time = datetime.now()
-                if hasattr(result, "summary"):
-                    self._house_state.ai_daily_summary = result.summary
-                if hasattr(result, "suggestions"):
-                    self._house_state.suggestions = result.suggestions
-
-                self.hass.bus.async_fire(
-                    f"{DOMAIN}_analysis_complete",
-                    {
-                        "provider": provider,
-                        "suggestion_count": len(
-                            result.suggestions if hasattr(result, "suggestions") else []
-                        ),
-                    },
-                )
-
-                # Create persistent notification with full analysis details
-                self._create_analysis_notification(provider)
+            # Create persistent notification with full analysis details
+            self._create_analysis_notification(provider)
         except ImportError:
             _LOGGER.warning(
                 "AI helper module not available; skipping analysis"
