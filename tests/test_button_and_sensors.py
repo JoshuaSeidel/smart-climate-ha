@@ -245,12 +245,20 @@ class TestPlatformRegistration:
 
 
 class TestCoordinatorNotification:
-    """Tests for _create_analysis_notification."""
+    """Tests for notification methods."""
 
-    def test_coordinator_has_notification_method(self):
-        """Coordinator should have _create_analysis_notification."""
+    def test_coordinator_has_send_notification(self):
+        """Coordinator should have _send_notification."""
         from custom_components.smart_climate.coordinator import (
             SmartClimateCoordinator,
         )
 
-        assert hasattr(SmartClimateCoordinator, "_create_analysis_notification")
+        assert hasattr(SmartClimateCoordinator, "_send_notification")
+
+    def test_coordinator_has_format_notification(self):
+        """Coordinator should have _format_analysis_notification."""
+        from custom_components.smart_climate.coordinator import (
+            SmartClimateCoordinator,
+        )
+
+        assert hasattr(SmartClimateCoordinator, "_format_analysis_notification")

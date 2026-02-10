@@ -745,9 +745,12 @@ class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         _LOGGER.info("Triggering AI analysis with provider '%s'", provider)
 
         try:
-            # Import lazily to avoid circular / heavy imports at startup
             from .ai import async_run_analysis
+        except ImportError:
+            _LOGGER.warning("AI module not available; skipping analysis")
+            return
 
+        try:
             await async_run_analysis(hass=self.hass, coordinator=self)
 
             self._house_state.last_analysis_time = datetime.now()
@@ -762,27 +765,41 @@ class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 },
             )
 
-            # Create persistent notification with full analysis details
-            self._create_analysis_notification(provider)
-        except ImportError:
-            _LOGGER.warning(
-                "AI helper module not available; skipping analysis"
+            self._send_notification(
+                "Smart Climate AI Analysis",
+                self._format_analysis_notification(provider),
             )
-        except Exception:
+        except Exception as err:
             _LOGGER.exception("AI analysis failed")
+            self._send_notification(
+                "Smart Climate AI Analysis Failed",
+                f"Analysis with provider **{provider}** failed:\n\n`{err}`",
+            )
 
-    def _create_analysis_notification(self, provider: str) -> None:
-        """Create a persistent notification with the full AI analysis results."""
+    def _send_notification(self, title: str, message: str) -> None:
+        """Create a persistent notification via the service bus."""
+        self.hass.async_create_task(
+            self.hass.services.async_call(
+                "persistent_notification",
+                "create",
+                {
+                    "title": title,
+                    "message": message,
+                    "notification_id": "smart_climate_analysis",
+                },
+            )
+        )
+
+    def _format_analysis_notification(self, provider: str) -> str:
+        """Build markdown body for the analysis results notification."""
         house = self._house_state
         lines: list[str] = []
 
-        # Summary section
         if house.ai_daily_summary:
             lines.append("## Summary")
             lines.append(house.ai_daily_summary)
             lines.append("")
 
-        # Suggestions section
         pending = [s for s in house.suggestions if s.status == SUGGESTION_PENDING]
         if pending:
             lines.append(f"## Suggestions ({len(pending)} pending)")
@@ -797,17 +814,10 @@ class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     lines.append(f"*Reasoning: {s.reasoning}*")
                 lines.append("")
 
-        # Metadata
         lines.append("---")
         lines.append(
             f"*Provider: {provider} | "
             f"Analyzed: {house.last_analysis_time.strftime('%Y-%m-%d %H:%M') if house.last_analysis_time else 'N/A'}*"
         )
 
-        message = "\n".join(lines)
-
-        self.hass.components.persistent_notification.async_create(
-            message=message,
-            title="Smart Climate AI Analysis",
-            notification_id="smart_climate_analysis",
-        )
+        return "\n".join(lines)
