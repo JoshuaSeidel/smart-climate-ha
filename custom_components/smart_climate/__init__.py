@@ -8,6 +8,7 @@ from pathlib import Path
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN
 from .coordinator import SmartClimateCoordinator
@@ -39,6 +40,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS_LIST)
     await async_setup_services(hass, coordinator)
+
+    # Remove devices/entities for rooms that were deleted from config
+    _cleanup_stale_devices(hass, entry, coordinator)
 
     # Register the Lovelace card as a static resource
     await _async_register_card(hass)
@@ -104,6 +108,32 @@ def _register_lovelace_resource(hass: HomeAssistant) -> None:
             _LOGGER.info("Registered Smart Climate card as Lovelace resource")
     except Exception:
         _LOGGER.debug("Could not auto-register Lovelace resource", exc_info=True)
+
+
+def _cleanup_stale_devices(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: SmartClimateCoordinator,
+) -> None:
+    """Remove devices (and their entities) for rooms no longer in the config."""
+    device_reg = dr.async_get(hass)
+    current_slugs = set(coordinator.room_configs.keys())
+
+    # Identifiers we expect to exist
+    valid_ids = {f"{entry.entry_id}_{slug}" for slug in current_slugs}
+    valid_ids.add(entry.entry_id)  # house-level device
+
+    for device in list(device_reg.devices.values()):
+        if entry.entry_id not in device.config_entries:
+            continue
+        for ident_domain, ident_id in device.identifiers:
+            if ident_domain == DOMAIN and ident_id not in valid_ids:
+                device_reg.async_remove_device(device.id)
+                _LOGGER.info(
+                    "Removed stale device for deleted room (device=%s)",
+                    device.name or ident_id,
+                )
+                break
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

@@ -234,9 +234,13 @@ def setup_mock_homeassistant():
 
     class FakeDeviceEntry:
         """Minimal device registry entry stub."""
-        def __init__(self, device_id, area_id=None):
+        def __init__(self, device_id, area_id=None, config_entries=None,
+                     identifiers=None, name=None):
             self.id = device_id
             self.area_id = area_id
+            self.config_entries = config_entries or set()
+            self.identifiers = identifiers or set()
+            self.name = name
 
     class FakeDeviceRegistry:
         """Minimal DeviceRegistry stub."""
@@ -245,6 +249,9 @@ def setup_mock_homeassistant():
 
         def async_get(self, device_id):
             return self.devices.get(device_id)
+
+        def async_remove_device(self, device_id):
+            self.devices.pop(device_id, None)
 
     ha_device_reg.DeviceEntry = FakeDeviceEntry
     ha_device_reg.FakeDeviceEntry = FakeDeviceEntry
