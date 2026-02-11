@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -753,7 +753,7 @@ class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             await async_run_analysis(hass=self.hass, coordinator=self)
 
-            self._house_state.last_analysis_time = datetime.now()
+            self._house_state.last_analysis_time = datetime.now(tz=timezone.utc)
 
             self.hass.bus.async_fire(
                 f"{DOMAIN}_analysis_complete",

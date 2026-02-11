@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from ..const import (
@@ -68,7 +68,7 @@ async def store_suggestions(
     # Store new suggestions and summary
     house.suggestions.extend(suggestions)
     house.ai_daily_summary = summary
-    house.last_analysis_time = datetime.now()
+    house.last_analysis_time = datetime.now(tz=timezone.utc)
 
     # Fire event so the frontend / automations can react
     hass.bus.async_fire(
