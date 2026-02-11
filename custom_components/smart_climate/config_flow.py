@@ -798,11 +798,13 @@ class SmartClimateOptionsFlow(OptionsFlow):
     def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize options flow."""
         self._config_entry = config_entry
-        # Working copies so we can edit before saving
+        # Deep-copy data so in-place edits don't mutate the live config
+        # entry.  Without this, async_update_entry cannot detect changes
+        # because the old and new dicts share the same room objects.
         self._data: dict[str, Any] = dict(config_entry.data)
-        self._rooms: list[dict[str, Any]] = list(
-            config_entry.data.get(CONF_ROOMS, [])
-        )
+        self._rooms: list[dict[str, Any]] = [
+            dict(r) for r in config_entry.data.get(CONF_ROOMS, [])
+        ]
         self._editing_room_index: int | None = None
 
     # ── Options Menu ──────────────────────────────────────────────────
