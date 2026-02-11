@@ -66,12 +66,14 @@ zones — do not emit separate set_temperature suggestions per room.
 - HVAC runtime and cycle counters are in-memory and reset to 0 when \
 Home Assistant restarts. If runtime/cycles are missing or 0, do NOT \
 conclude the HVAC is broken — the system may have recently restarted.
-- If a room sensor temperature shows "not available", the sensor may be \
-temporarily unreachable. Do NOT assume the room is unheated.
 - Comfort and efficiency scores of 0 mean "not yet calculated", not \
 "terrible". These are omitted when not yet available.
-- Focus your analysis on data that IS available rather than drawing \
-conclusions from missing data.
+- Some room fields may be omitted if data is not yet available. This is \
+normal and does NOT indicate a sensor problem.
+- NEVER suggest investigating sensor availability or missing readings. \
+The system already monitors sensor health separately.
+- Focus your analysis EXCLUSIVELY on the data that IS present. Do NOT \
+comment on or draw conclusions from missing fields.
 
 ## Output Format
 
@@ -267,11 +269,8 @@ def _detail_room(slug: str, name: str, room: Any) -> str:
         parts.append(f"  - Climate entity: {climate_entity}")
 
     temp = getattr(room, "temperature", None)
-    parts.append(
-        f"  - Room sensor temperature: {temp}"
-        if temp is not None
-        else "  - Room sensor temperature: not available"
-    )
+    if temp is not None:
+        parts.append(f"  - Room sensor temperature: {temp}")
 
     humidity = getattr(room, "humidity", None)
     if humidity is not None:
@@ -279,11 +278,8 @@ def _detail_room(slug: str, name: str, room: Any) -> str:
 
     target = getattr(room, "current_target", None)
     entity_label = climate_entity or "climate entity"
-    parts.append(
-        f"  - HVAC target (from {entity_label}): {target}"
-        if target is not None
-        else f"  - HVAC target (from {entity_label}): not available"
-    )
+    if target is not None:
+        parts.append(f"  - HVAC target (from {entity_label}): {target}")
 
     smart_target = getattr(room, "smart_target", None)
     if smart_target is not None:
