@@ -250,6 +250,13 @@ def _build_rooms_section(
     for slug, room in rooms_data.items():
         name = getattr(getattr(room, "config", None), "name", slug)
 
+        # Skip rooms with no climate data at all — the AI cannot
+        # produce useful suggestions without temperature or target info.
+        temp = getattr(room, "temperature", None)
+        target = getattr(room, "current_target", None)
+        if temp is None and target is None:
+            continue
+
         if summarize:
             lines.append(_summarize_room(slug, name, room))
         else:
@@ -361,6 +368,11 @@ def _build_hvac_systems_section(rooms_data: dict[str, Any]) -> str:
     # Map climate_entity -> list of room names
     hvac_groups: dict[str, list[str]] = {}
     for slug, room in rooms_data.items():
+        # Only include rooms that have climate data
+        temp = getattr(room, "temperature", None)
+        target = getattr(room, "current_target", None)
+        if temp is None and target is None:
+            continue
         config = getattr(room, "config", None)
         entity = getattr(config, "climate_entity", None) if config else None
         if entity:

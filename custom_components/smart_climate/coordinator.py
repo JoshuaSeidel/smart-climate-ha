@@ -710,10 +710,13 @@ class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     last_analysis
                 )
 
-        # Restore suggestions
+        # Restore suggestions — drop any that reference deleted rooms
+        valid_rooms = set(self.room_configs.keys())
         for s_data in house_data.get("suggestions", []):
             with contextlib.suppress(Exception):
-                self._house_state.suggestions.append(Suggestion.from_dict(s_data))
+                s = Suggestion.from_dict(s_data)
+                if s.room is None or s.room in valid_rooms:
+                    self._house_state.suggestions.append(s)
 
         _LOGGER.info(
             "Restored persisted state (saved_date=%s, same_day=%s, suggestions=%d)",
@@ -961,7 +964,12 @@ class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             lines.append(house.ai_daily_summary)
             lines.append("")
 
-        pending = [s for s in house.suggestions if s.status == SUGGESTION_PENDING]
+        valid_rooms = set(self.room_configs.keys())
+        pending = [
+            s for s in house.suggestions
+            if s.status == SUGGESTION_PENDING
+            and (s.room is None or s.room in valid_rooms)
+        ]
         if pending:
             lines.append(f"## Suggestions ({len(pending)} pending)")
             for s in pending:

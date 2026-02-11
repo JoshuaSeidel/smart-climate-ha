@@ -65,6 +65,11 @@ async def store_suggestions(
     # Expire any old suggestions first
     expire_old_suggestions(house)
 
+    # Clear previous pending suggestions — the new analysis replaces them
+    house.suggestions = [
+        s for s in house.suggestions if s.status != SUGGESTION_PENDING
+    ]
+
     # Store new suggestions and summary
     house.suggestions.extend(suggestions)
     house.ai_daily_summary = summary
