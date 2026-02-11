@@ -262,7 +262,7 @@ class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # -- Temperature (average of configured sensors) ---------------
         temps: list[float] = []
         for entity_id in cfg.temp_sensors:
-            value = self._get_numeric_state(entity_id)
+            value = self._get_sensor_temperature(entity_id)
             if value is not None:
                 temps.append(value)
         if temps:
@@ -273,7 +273,7 @@ class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # -- Humidity (average) ----------------------------------------
         humids: list[float] = []
         for entity_id in cfg.humidity_sensors:
-            value = self._get_numeric_state(entity_id)
+            value = self._get_sensor_value(entity_id, "humidity")
             if value is not None:
                 humids.append(value)
         if humids:
@@ -302,7 +302,18 @@ class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # -- Climate entity --------------------------------------------
         climate_state = self.hass.states.get(cfg.climate_entity)
         if climate_state is not None:
+            # Try single target first, fall back to high/low range midpoint
             target = climate_state.attributes.get("temperature")
+            if target is None:
+                high = climate_state.attributes.get("target_temp_high")
+                low = climate_state.attributes.get("target_temp_low")
+                if high is not None and low is not None:
+                    with contextlib.suppress(ValueError, TypeError):
+                        target = (float(high) + float(low)) / 2.0
+                elif high is not None:
+                    target = high
+                elif low is not None:
+                    target = low
             if target is not None:
                 with contextlib.suppress(ValueError, TypeError):
                     room.current_target = float(target)
@@ -755,6 +766,55 @@ class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return None
         try:
             return float(state.state)
+        except (ValueError, TypeError):
+            return None
+
+    def _get_sensor_temperature(self, entity_id: str) -> float | None:
+        """Return temperature from a sensor or climate entity.
+
+        For ``climate.*`` entities the temperature lives in the
+        ``current_temperature`` attribute (the ``.state`` is the HVAC mode
+        string like 'heat').  For regular ``sensor.*`` entities the value is
+        in ``.state``.
+        """
+        state = self.hass.states.get(entity_id)
+        if state is None:
+            return None
+
+        if entity_id.startswith("climate."):
+            raw = state.attributes.get("current_temperature")
+        else:
+            raw = state.state
+
+        if raw is None or (isinstance(raw, str) and raw in ("unavailable", "unknown", "")):
+            return None
+        try:
+            return float(raw)
+        except (ValueError, TypeError):
+            return None
+
+    def _get_sensor_value(self, entity_id: str, attr_name: str) -> float | None:
+        """Return a numeric value from a sensor or climate entity.
+
+        For ``climate.*`` entities, tries the ``current_{attr_name}``
+        attribute first (e.g. ``current_humidity``), then ``{attr_name}``.
+        For regular ``sensor.*`` entities reads ``.state``.
+        """
+        state = self.hass.states.get(entity_id)
+        if state is None:
+            return None
+
+        if entity_id.startswith("climate."):
+            raw = state.attributes.get(f"current_{attr_name}")
+            if raw is None:
+                raw = state.attributes.get(attr_name)
+        else:
+            raw = state.state
+
+        if raw is None or (isinstance(raw, str) and raw in ("unavailable", "unknown", "")):
+            return None
+        try:
+            return float(raw)
         except (ValueError, TypeError):
             return None
 
