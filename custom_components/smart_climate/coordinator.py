@@ -10,6 +10,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
@@ -79,12 +80,17 @@ from .models import (
     RoomConfig,
     RoomState,
     Schedule,
+    Suggestion,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 # Number of recent temperature readings to keep for trend calculation
 TEMP_HISTORY_SIZE = 5
+
+# Persistent storage
+STORAGE_VERSION = 1
+SAVE_INTERVAL = timedelta(minutes=5)
 
 
 class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -146,6 +152,12 @@ class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # House-level state
         self._house_state = HouseState()
+
+        # Persistent storage for surviving HA restarts
+        self._store: Store = Store(
+            hass, STORAGE_VERSION, f"{DOMAIN}_{entry.entry_id}_state"
+        )
+        self._last_save_time: datetime | None = None
 
         # Previous follow-me target (for change detection / events)
         self._prev_follow_me_target: str | None = None
@@ -231,6 +243,9 @@ class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._update_house_state(rooms, now)
         except Exception:
             _LOGGER.exception("Error updating house state")
+
+        # ---- periodic state save -----------------------------------------
+        self._maybe_save_state(now)
 
         return {"rooms": rooms, "house": self._house_state}
 
@@ -642,6 +657,92 @@ class SmartClimateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if outdoor_temp is not None:
             house.heating_degree_days = calculate_heating_degree_days(outdoor_temp)
             house.cooling_degree_days = calculate_cooling_degree_days(outdoor_temp)
+
+    # ------------------------------------------------------------------
+    # State persistence (survive HA restarts)
+    # ------------------------------------------------------------------
+
+    async def async_restore_state(self) -> None:
+        """Restore persisted state from storage on startup."""
+        data = await self._store.async_load()
+        if data is None:
+            _LOGGER.debug("No persisted state found; starting fresh")
+            return
+
+        saved_date = data.get("saved_date")
+        today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+        is_same_day = saved_date == today
+
+        # Restore per-room runtime data (only if same day)
+        rooms_data = data.get("rooms", {})
+        for slug, room_data in rooms_data.items():
+            if slug in self._room_states:
+                room = self._room_states[slug]
+                if is_same_day:
+                    room.hvac_runtime_today = room_data.get(
+                        "hvac_runtime_today", 0.0
+                    )
+                    room.hvac_cycles_today = room_data.get(
+                        "hvac_cycles_today", 0
+                    )
+
+        # Restore house AI state (persists across days)
+        house_data = data.get("house", {})
+        summary = house_data.get("ai_daily_summary", "")
+        if summary:
+            self._house_state.ai_daily_summary = summary
+
+        last_analysis = house_data.get("last_analysis_time")
+        if last_analysis:
+            with contextlib.suppress(ValueError, TypeError):
+                self._house_state.last_analysis_time = datetime.fromisoformat(
+                    last_analysis
+                )
+
+        # Restore suggestions
+        for s_data in house_data.get("suggestions", []):
+            with contextlib.suppress(Exception):
+                self._house_state.suggestions.append(Suggestion.from_dict(s_data))
+
+        _LOGGER.info(
+            "Restored persisted state (saved_date=%s, same_day=%s, suggestions=%d)",
+            saved_date,
+            is_same_day,
+            len(self._house_state.suggestions),
+        )
+
+    async def async_save_state(self) -> None:
+        """Persist current state to storage."""
+        data: dict[str, Any] = {
+            "saved_date": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d"),
+            "rooms": {},
+            "house": {
+                "ai_daily_summary": self._house_state.ai_daily_summary,
+                "last_analysis_time": (
+                    self._house_state.last_analysis_time.isoformat()
+                    if self._house_state.last_analysis_time
+                    else None
+                ),
+                "suggestions": [
+                    s.to_dict() for s in self._house_state.suggestions
+                ],
+            },
+        }
+        for slug, room in self._room_states.items():
+            data["rooms"][slug] = {
+                "hvac_runtime_today": room.hvac_runtime_today,
+                "hvac_cycles_today": room.hvac_cycles_today,
+            }
+
+        await self._store.async_save(data)
+        self._last_save_time = datetime.now(tz=timezone.utc)
+
+    def _maybe_save_state(self, now: datetime) -> None:
+        """Schedule a save if enough time has elapsed since last save."""
+        if self._last_save_time is None or (
+            datetime.now(tz=timezone.utc) - self._last_save_time > SAVE_INTERVAL
+        ):
+            self.hass.async_create_task(self.async_save_state())
 
     # ------------------------------------------------------------------
     # Helper: read entity states

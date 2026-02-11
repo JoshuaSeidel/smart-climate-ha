@@ -61,6 +61,18 @@ changes the climate entity setpoint for all rooms on that system.
 - When rooms share an HVAC, suggest ONE temperature that best serves all \
 zones — do not emit separate set_temperature suggestions per room.
 
+## Data Limitations
+
+- HVAC runtime and cycle counters are in-memory and reset to 0 when \
+Home Assistant restarts. If runtime/cycles are missing or 0, do NOT \
+conclude the HVAC is broken — the system may have recently restarted.
+- If a room sensor temperature shows "not available", the sensor may be \
+temporarily unreachable. Do NOT assume the room is unheated.
+- Comfort and efficiency scores of 0 mean "not yet calculated", not \
+"terrible". These are omitted when not yet available.
+- Focus your analysis on data that IS available rather than drawing \
+conclusions from missing data.
+
 ## Output Format
 
 You MUST respond with valid JSON matching this exact schema:
@@ -180,15 +192,15 @@ def _build_house_section(house_state: Any) -> str:
     lines = ["## House Overview"]
 
     comfort = getattr(house_state, "comfort_score", None)
-    if comfort is not None:
+    if comfort is not None and comfort > 0:
         lines.append(f"- Overall comfort score: {comfort}/100")
 
     efficiency = getattr(house_state, "efficiency_score", None)
-    if efficiency is not None:
+    if efficiency is not None and efficiency > 0:
         lines.append(f"- Overall efficiency score: {efficiency}/100")
 
     runtime = getattr(house_state, "total_hvac_runtime", None)
-    if runtime is not None:
+    if runtime is not None and runtime > 0:
         lines.append(f"- Total HVAC runtime today: {runtime:.0f} minutes")
 
     outdoor_temp = getattr(house_state, "outdoor_temperature", None)
@@ -255,27 +267,34 @@ def _detail_room(slug: str, name: str, room: Any) -> str:
         parts.append(f"  - Climate entity: {climate_entity}")
 
     temp = getattr(room, "temperature", None)
-    if temp is not None:
-        parts.append(f"  - Room sensor temperature: {temp}")
+    parts.append(
+        f"  - Room sensor temperature: {temp}"
+        if temp is not None
+        else "  - Room sensor temperature: not available"
+    )
 
     humidity = getattr(room, "humidity", None)
     if humidity is not None:
         parts.append(f"  - Humidity: {humidity}%")
 
     target = getattr(room, "current_target", None)
-    if target is not None:
-        parts.append(f"  - HVAC target (from {climate_entity or 'climate entity'}): {target}")
+    entity_label = climate_entity or "climate entity"
+    parts.append(
+        f"  - HVAC target (from {entity_label}): {target}"
+        if target is not None
+        else f"  - HVAC target (from {entity_label}): not available"
+    )
 
     smart_target = getattr(room, "smart_target", None)
     if smart_target is not None:
         parts.append(f"  - Smart target: {smart_target}")
 
     comfort = getattr(room, "comfort_score", None)
-    if comfort is not None:
+    if comfort is not None and comfort > 0:
         parts.append(f"  - Comfort score: {comfort}/100")
 
     efficiency = getattr(room, "efficiency_score", None)
-    if efficiency is not None:
+    if efficiency is not None and efficiency > 0:
         parts.append(f"  - Efficiency score: {efficiency}/100")
 
     occupied = getattr(room, "occupied", None)
@@ -291,11 +310,11 @@ def _detail_room(slug: str, name: str, room: Any) -> str:
         parts.append(f"  - HVAC action: {action}")
 
     runtime = getattr(room, "hvac_runtime_today", None)
-    if runtime is not None:
+    if runtime is not None and runtime > 0:
         parts.append(f"  - HVAC runtime today: {runtime:.0f} min")
 
     cycles = getattr(room, "hvac_cycles_today", None)
-    if cycles is not None:
+    if cycles is not None and cycles > 0:
         parts.append(f"  - HVAC cycles today: {cycles}")
 
     trend = getattr(room, "temp_trend", None)

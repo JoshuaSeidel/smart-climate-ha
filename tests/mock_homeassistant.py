@@ -149,6 +149,22 @@ def setup_mock_homeassistant():
 
     ha_coordinator.CoordinatorEntity = FakeCoordinatorEntity
 
+    # homeassistant.helpers.storage
+    ha_storage = _create_module("homeassistant.helpers.storage")
+
+    class FakeStore:
+        """Minimal Store stub for testing."""
+        def __init__(self, hass=None, version=None, key=None, **kwargs):
+            self._data = None
+
+        async def async_load(self):
+            return self._data
+
+        async def async_save(self, data):
+            self._data = data
+
+    ha_storage.Store = FakeStore
+
     # homeassistant.helpers.event
     ha_event = _create_module("homeassistant.helpers.event")
     ha_event.async_track_time_change = MagicMock(return_value=lambda: None)

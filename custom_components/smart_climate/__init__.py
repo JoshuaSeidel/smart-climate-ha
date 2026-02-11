@@ -32,6 +32,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
     coordinator = SmartClimateCoordinator(hass, entry)
+    await coordinator.async_restore_state()
     await coordinator.async_config_entry_first_refresh()
 
     hass.data[DOMAIN][entry.entry_id] = coordinator
@@ -109,6 +110,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     coordinator: SmartClimateCoordinator = hass.data[DOMAIN][entry.entry_id]
     coordinator.cancel_scheduled_tasks()
+    await coordinator.async_save_state()
 
     unload_ok = await hass.config_entries.async_unload_platforms(
         entry, PLATFORMS_LIST

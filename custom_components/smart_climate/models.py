@@ -240,6 +240,50 @@ class Suggestion:
             "rejected_reason": self.rejected_reason,
         }
 
+    @classmethod
+    def from_dict(cls, data: dict) -> Suggestion:
+        """Deserialize from a dict (e.g. from storage)."""
+        priority = data.get("priority", "medium")
+        try:
+            priority = SuggestionPriority(priority)
+        except ValueError:
+            priority = SuggestionPriority.MEDIUM
+
+        created_at = data.get("created_at")
+        if isinstance(created_at, str):
+            created_at = datetime.fromisoformat(created_at)
+        elif not isinstance(created_at, datetime):
+            created_at = datetime.now()
+
+        expires_at = data.get("expires_at")
+        if isinstance(expires_at, str):
+            expires_at = datetime.fromisoformat(expires_at)
+        elif not isinstance(expires_at, datetime):
+            expires_at = created_at + timedelta(hours=24)
+
+        applied_at = data.get("applied_at")
+        if isinstance(applied_at, str):
+            applied_at = datetime.fromisoformat(applied_at)
+        elif not isinstance(applied_at, datetime):
+            applied_at = None
+
+        return cls(
+            id=data.get("id", str(uuid.uuid4())),
+            title=data.get("title", ""),
+            description=data.get("description", ""),
+            reasoning=data.get("reasoning", ""),
+            room=data.get("room"),
+            action_type=data.get("action_type", ""),
+            action_data=data.get("action_data", {}),
+            confidence=float(data.get("confidence", 0.0)),
+            priority=priority,
+            status=data.get("status", SUGGESTION_PENDING),
+            created_at=created_at,
+            expires_at=expires_at,
+            applied_at=applied_at,
+            rejected_reason=data.get("rejected_reason"),
+        )
+
 
 @dataclass
 class HouseState:
